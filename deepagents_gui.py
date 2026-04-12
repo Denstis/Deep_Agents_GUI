@@ -516,6 +516,42 @@ class SimpleFilesystemTools:
             logger.error(f"Directory listing failed: {str(e)}")
             return f"Error listing directory: {str(e)}"
 
+    @staticmethod
+    @tool
+    def execute_command(command: str) -> str:
+        """Execute a shell command (read-only operations recommended).
+
+        Args:
+            command: Shell command to execute.
+
+        Returns:
+            Command output or error message.
+        """
+        import subprocess
+        try:
+            # Safety: Only allow read-only commands
+            readonly_prefixes = ["ls", "dir", "cat", "head", "tail", "pwd", "echo", "find", "grep"]
+            cmd_lower = command.lower().strip()
+            if not any(cmd_lower.startswith(prefix) for prefix in readonly_prefixes):
+                return "Error: Only read-only commands are allowed for safety."
+            
+            result = subprocess.run(
+                command,
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            output = result.stdout if result.stdout else result.stderr
+            logger.debug(f"Command executed: {command}, output length: {len(output)}")
+            return output.strip() or "Command executed successfully (no output)."
+        except subprocess.TimeoutExpired:
+            logger.error(f"Command timed out: {command}")
+            return "Error: Command timed out."
+        except Exception as e:
+            logger.error(f"Command execution failed: {str(e)}")
+            return f"Error executing command: {str(e)}"
+
 
 class MessageBubble(ctk.CTkFrame):
     """A message bubble widget for chat display."""
