@@ -15,6 +15,9 @@ Features:
 - Real-time status updates
 - Todo list tracking
 - Memory management
+- Web search capabilities
+- Calculator and math tools
+- Debug logging
 """
 
 import asyncio
@@ -23,15 +26,53 @@ import os
 import sys
 import threading
 import time
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Optional
+from functools import wraps
 
 import customtkinter as ctk
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import BaseTool, tool
 import httpx
+
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('deepagents_gui.log', encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# Try to import additional tools
+try:
+    from duckduckgo_search import DDGS
+    DDGS_AVAILABLE = True
+    logger.info("DuckDuckGo search available")
+except ImportError:
+    DDGS_AVAILABLE = False
+    logger.warning("DuckDuckGo search not available - install with: pip install duckduckgo-search")
+
+try:
+    from sympy import symbols, Eq, solve, sympify
+    SYMPY_AVAILABLE = True
+    logger.info("SymPy math solver available")
+except ImportError:
+    SYMPY_AVAILABLE = False
+    logger.warning("SymPy not available - install with: pip install sympy")
+
+try:
+    from PIL import Image
+    PIL_AVAILABLE = True
+    logger.info("Pillow image processing available")
+except ImportError:
+    PIL_AVAILABLE = False
+    logger.warning("Pillow not available - install with: pip install Pillow")
 
 # Configure customtkinter appearance
 ctk.set_appearance_mode("dark")
@@ -42,9 +83,10 @@ ctk.set_default_color_theme("blue")
 try:
     from deepagents import create_deep_agent
     DEEPAGENTS_AVAILABLE = True
+    logger.info("DeepAgents package loaded successfully")
 except ImportError:
     DEEPAGENTS_AVAILABLE = False
-    print("Note: deepagents package not installed. Using basic LangGraph agent.")
+    logger.warning("DeepAgents package not installed. Using basic LangGraph agent.")
 
 
 class LMStudioClient:
@@ -53,9 +95,11 @@ class LMStudioClient:
     def __init__(self, base_url: str = "http://localhost:1234"):
         self.base_url = base_url.rstrip("/")
         self.api_key = "lm-studio"  # LM Studio doesn't require a real API key
+        logger.debug(f"LMStudioClient initialized with base_url: {self.base_url}")
         
     def get_chat_model(self, model_name: Optional[str] = None, temperature: float = 0.7):
         """Get a ChatOpenAI instance configured for LM Studio."""
+        logger.info(f"Getting chat model: {model_name or 'local-model'}, temperature: {temperature}")
         return ChatOpenAI(
             base_url=f"{self.base_url}/v1",
             api_key=self.api_key,
@@ -67,22 +111,29 @@ class LMStudioClient:
     async def check_connection(self) -> bool:
         """Check if LM Studio server is reachable."""
         try:
+            logger.debug(f"Checking connection to {self.base_url}/v1/models")
             async with httpx.AsyncClient() as client:
                 response = await client.get(f"{self.base_url}/v1/models", timeout=5.0)
-                return response.status_code == 200
-        except Exception:
+                connected = response.status_code == 200
+                logger.info(f"Connection check result: {connected} (status: {response.status_code})")
+                return connected
+        except Exception as e:
+            logger.error(f"Connection check failed: {str(e)}")
             return False
     
     async def get_available_models(self) -> list[str]:
         """Get list of available models from LM Studio."""
         try:
+            logger.debug("Fetching available models from LM Studio")
             async with httpx.AsyncClient() as client:
                 response = await client.get(f"{self.base_url}/v1/models", timeout=5.0)
                 if response.status_code == 200:
                     data = response.json()
-                    return [model["id"] for model in data.get("data", [])]
-        except Exception:
-            pass
+                    models = [model["id"] for model in data.get("data", [])]
+                    logger.info(f"Found {len(models)} models: {models}")
+                    return models
+        except Exception as e:
+            logger.error(f"Failed to get models: {str(e)}")
         return []
 
 
@@ -184,11 +235,286 @@ class SimpleFilesystemTools:
                 timeout=30,
             )
             output = result.stdout if result.stdout else result.stderr
+            logger.debug(f"Command executed: {command}, output length: {len(output)}")
             return output.strip() or "Command executed successfully (no output)."
         except subprocess.TimeoutExpired:
+            logger.error(f"Command timed out: {command}")
             return "Error: Command timed out."
         except Exception as e:
+            logger.error(f"Command execution failed: {str(e)}")
             return f"Error executing command: {str(e)}"
+
+
+class WebSearchTools:
+    """Web search tools using DuckDuckGo."""
+    
+    @staticmethod
+    @tool
+    def web_search(query: str, num_results: int = 5) -> str:
+        """Search the web for current information.
+        
+        Args:
+            query: Search query string.
+            num_results: Number of results to return (default: 5).
+            
+        Returns:
+            Search results with titles and snippets.
+        """
+        if not DDGS_AVAILABLE:
+            logger.warning("Web search requested but DuckDuckGo not available")
+            return "Error: Web search is not available. Please install duckduckgo-search package."
+        
+        try:
+            logger.info(f"Performing web search: '{query}' (num_results={num_results})")
+            with DDGS() as ddgs:
+                results = list(ddgs.text(query, max_results=num_results))
+                if not results:
+                    return f"No results found for '{query}'"
+                
+                formatted = []
+                for i, r in enumerate(results[:num_results], 1):
+                    title = r.get('title', 'No title')
+                    body = r.get('body', 'No description')
+                    url = r.get('href', 'No URL')
+                    formatted.append(f"{i}. {title}\n   {body}\n   URL: {url}")
+                
+                result_text = "\n\n".join(formatted)
+                logger.info(f"Web search returned {len(results)} results")
+                return f"Search results for '{query}':\n\n{result_text}"
+        except Exception as e:
+            logger.error(f"Web search failed: {str(e)}")
+            return f"Error performing web search: {str(e)}"
+    
+    @staticmethod
+    @tool
+    def news_search(topic: str, num_results: int = 3) -> str:
+        """Search for recent news on a topic.
+        
+        Args:
+            topic: News topic to search for.
+            num_results: Number of results to return (default: 3).
+            
+        Returns:
+            Recent news articles about the topic.
+        """
+        if not DDGS_AVAILABLE:
+            return "Error: News search is not available. Please install duckduckgo-search package."
+        
+        try:
+            logger.info(f"Performing news search: '{topic}'")
+            with DDGS() as ddgs:
+                results = list(ddgs.news(topic, max_results=num_results))
+                if not results:
+                    return f"No news found for '{topic}'"
+                
+                formatted = []
+                for i, r in enumerate(results[:num_results], 1):
+                    title = r.get('title', 'No title')
+                    source = r.get('source', 'Unknown source')
+                    date = r.get('date', 'Unknown date')
+                    url = r.get('url', 'No URL')
+                    formatted.append(f"{i}. {title}\n   Source: {source} | Date: {date}\n   URL: {url}")
+                
+                result_text = "\n\n".join(formatted)
+                logger.info(f"News search returned {len(results)} results")
+                return f"Recent news about '{topic}':\n\n{result_text}"
+        except Exception as e:
+            logger.error(f"News search failed: {str(e)}")
+            return f"Error performing news search: {str(e)}"
+
+
+class MathTools:
+    """Mathematical computation tools using SymPy."""
+    
+    @staticmethod
+    @tool
+    def calculate(expression: str) -> str:
+        """Evaluate a mathematical expression safely.
+        
+        Args:
+            expression: Mathematical expression to evaluate (e.g., "2 + 2", "sqrt(16)", "sin(pi/2)").
+            
+        Returns:
+            Result of the calculation.
+        """
+        if not SYMPY_AVAILABLE:
+            logger.warning("Calculation requested but SymPy not available")
+            return "Error: Calculator is not available. Please install sympy package."
+        
+        try:
+            logger.info(f"Calculating expression: '{expression}'")
+            # Safely evaluate the expression using sympify
+            result = sympify(expression, evaluate=True)
+            result_str = str(result)
+            logger.info(f"Calculation result: {result_str}")
+            return f"Result of '{expression}': {result_str}"
+        except Exception as e:
+            logger.error(f"Calculation failed: {str(e)}")
+            return f"Error calculating '{expression}': {str(e)}"
+    
+    @staticmethod
+    @tool
+    def solve_equation(equation: str, variable: str = "x") -> str:
+        """Solve an algebraic equation.
+        
+        Args:
+            equation: Equation to solve (e.g., "x**2 - 4 = 0" or "2*x + 3 = 7").
+            variable: Variable to solve for (default: "x").
+            
+        Returns:
+            Solution(s) to the equation.
+        """
+        if not SYMPY_AVAILABLE:
+            return "Error: Equation solver is not available. Please install sympy package."
+        
+        try:
+            logger.info(f"Solving equation: '{equation}' for variable '{variable}'")
+            x = symbols(variable)
+            
+            # Parse the equation - handle both "expr = 0" and "expr1 = expr2" formats
+            if "=" in equation:
+                left, right = equation.split("=", 1)
+                eq = Eq(sympify(left.strip()), sympify(right.strip()))
+            else:
+                eq = Eq(sympify(equation), 0)
+            
+            solutions = solve(eq, x)
+            if not solutions:
+                return f"No solutions found for: {equation}"
+            
+            solution_str = ", ".join(str(s) for s in solutions)
+            logger.info(f"Equation solutions: {solution_str}")
+            return f"Solutions for '{equation}': {solution_str}"
+        except Exception as e:
+            logger.error(f"Equation solving failed: {str(e)}")
+            return f"Error solving '{equation}': {str(e)}"
+
+
+class ImageTools:
+    """Image processing tools using Pillow."""
+    
+    @staticmethod
+    @tool
+    def get_image_info(image_path: str) -> str:
+        """Get information about an image file.
+        
+        Args:
+            image_path: Path to the image file.
+            
+        Returns:
+            Image metadata including format, size, mode, etc.
+        """
+        if not PIL_AVAILABLE:
+            logger.warning("Image info requested but Pillow not available")
+            return "Error: Image processing is not available. Please install Pillow package."
+        
+        try:
+            logger.info(f"Getting image info: '{image_path}'")
+            path = Path(image_path)
+            if not path.exists():
+                return f"Error: Image file '{image_path}' does not exist."
+            
+            with Image.open(path) as img:
+                info = {
+                    "format": img.format,
+                    "mode": img.mode,
+                    "size": img.size,
+                    "width": img.width,
+                    "height": img.height
+                }
+                result = f"Image info for '{image_path}':\n"
+                result += "\n".join(f"  {k}: {v}" for k, v in info.items())
+                logger.info(f"Image info retrieved: {info}")
+                return result
+        except Exception as e:
+            logger.error(f"Image info failed: {str(e)}")
+            return f"Error getting image info: {str(e)}"
+
+
+class SimpleFilesystemTools:
+    """Simple filesystem tools for the agent."""
+    
+    @staticmethod
+    @tool
+    def read_file(file_path: str) -> str:
+        """Read contents of a file.
+        
+        Args:
+            file_path: Path to the file to read.
+            
+        Returns:
+            Contents of the file or error message.
+        """
+        try:
+            logger.debug(f"Reading file: {file_path}")
+            path = Path(file_path)
+            if not path.exists():
+                logger.warning(f"File not found: {file_path}")
+                return f"Error: File '{file_path}' does not exist."
+            if not path.is_file():
+                logger.warning(f"Not a file: {file_path}")
+                return f"Error: '{file_path}' is not a file."
+            content = path.read_text(encoding="utf-8")
+            logger.debug(f"File read successful, {len(content)} characters")
+            return content
+        except Exception as e:
+            logger.error(f"File read failed: {str(e)}")
+            return f"Error reading file: {str(e)}"
+    
+    @staticmethod
+    @tool
+    def write_file(file_path: str, content: str) -> str:
+        """Write content to a file.
+        
+        Args:
+            file_path: Path to the file to write.
+            content: Content to write to the file.
+            
+        Returns:
+            Success message or error.
+        """
+        try:
+            logger.debug(f"Writing file: {file_path} ({len(content)} chars)")
+            path = Path(file_path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+            logger.info(f"File written successfully: {file_path}")
+            return f"Successfully wrote {len(content)} characters to '{file_path}'."
+        except Exception as e:
+            logger.error(f"File write failed: {str(e)}")
+            return f"Error writing file: {str(e)}"
+    
+    @staticmethod
+    @tool
+    def list_directory(dir_path: str = ".") -> str:
+        """List contents of a directory.
+        
+        Args:
+            dir_path: Path to the directory to list.
+            
+        Returns:
+            List of files and directories or error message.
+        """
+        try:
+            logger.debug(f"Listing directory: {dir_path}")
+            path = Path(dir_path)
+            if not path.exists():
+                logger.warning(f"Directory not found: {dir_path}")
+                return f"Error: Directory '{dir_path}' does not exist."
+            if not path.is_dir():
+                logger.warning(f"Not a directory: {dir_path}")
+                return f"Error: '{dir_path}' is not a directory."
+            
+            items = []
+            for item in sorted(path.iterdir()):
+                prefix = "[DIR] " if item.is_dir() else "[FILE] "
+                items.append(f"{prefix}{item.name}")
+            
+            logger.debug(f"Directory listing: {len(items)} items")
+            return "\n".join(items) if items else "Directory is empty."
+        except Exception as e:
+            logger.error(f"Directory listing failed: {str(e)}")
+            return f"Error listing directory: {str(e)}"
 
 
 class MessageBubble(ctk.CTkFrame):
@@ -206,6 +532,7 @@ class MessageBubble(ctk.CTkFrame):
         
         self.role = role
         self.configure(corner_radius=10, fg_color="transparent")
+        logger.debug(f"MessageBubble created: role={role}, message_len={len(message)}")
         
         # Timestamp
         if timestamp is None:
@@ -687,16 +1014,30 @@ class DeepAgentsGUI(ctk.CTk):
     
     def _add_welcome_message(self):
         """Add welcome message to chat."""
+        tools_available = []
+        if DDGS_AVAILABLE:
+            tools_available.extend(["Web search", "News search"])
+        if SYMPY_AVAILABLE:
+            tools_available.extend(["Calculator", "Equation solver"])
+        if PIL_AVAILABLE:
+            tools_available.append("Image info")
+        
         welcome_text = (
-            "Welcome to DeepAgents GUI! 🎉\n\n"
-            "I'm connected to LM Studio and ready to help you with various tasks.\n\n"
-            "I can:\n"
-            "• Answer questions using local models\n"
-            "• Read and write files\n"
-            "• List directory contents\n"
-            "• Execute safe shell commands\n\n"
-            "To get started, simply type your message below!"
+            f"Welcome to DeepAgents GUI! 🎉\n\n"
+            f"I'm connected to LM Studio and ready to help you with various tasks.\n\n"
+            f"I can:\n"
+            f"• Answer questions using local models\n"
+            f"• Read and write files\n"
+            f"• List directory contents\n"
+            f"• Execute safe shell commands\n"
         )
+        
+        if tools_available:
+            welcome_text += f"• {', '.join(tools_available)}\n"
+        
+        welcome_text += "\nTo get started, simply type your message below!"
+        
+        logger.info(f"Displaying welcome message, tools available: {tools_available}")
         
         bubble = MessageBubble(
             self.chat_canvas,
@@ -709,6 +1050,8 @@ class DeepAgentsGUI(ctk.CTk):
     def _add_message_bubble(self, message: str, role: str = "user") -> MessageBubble:
         """Add a message bubble to the chat."""
         row = len(self.conversation_history)
+        
+        logger.debug(f"Adding {role} message bubble at row {row}, message length: {len(message)}")
         
         bubble = MessageBubble(
             self.chat_canvas,
@@ -725,20 +1068,25 @@ class DeepAgentsGUI(ctk.CTk):
     
     def _update_status(self, status: str):
         """Update status bar text."""
+        logger.debug(f"Status update: {status}")
         self.status_label.configure(text=status)
     
     def _check_lmstudio_connection(self):
         """Check LM Studio connection asynchronously."""
+        logger.info("Checking LM Studio connection...")
         async def check():
             connected = await self.lmstudio_client.check_connection()
             if connected:
+                logger.info("LM Studio connection successful")
                 self.connection_indicator.configure(text="●", text_color="#2ecc71")
                 self.connection_label.configure(text="Connected", text_color="#2ecc71")
                 self._update_status("Connected to LM Studio")
                 
                 # Get available models
+                logger.debug("Fetching available models...")
                 models = await self.lmstudio_client.get_available_models()
                 if models:
+                    logger.info(f"Found {len(models)} models from LM Studio")
                     self.info_label.configure(text=f"Available models: {len(models)}")
                     # Populate model dropdown
                     self.model_dropdown.configure(values=models)
@@ -749,6 +1097,7 @@ class DeepAgentsGUI(ctk.CTk):
                     # Update connect button text
                     self.connect_btn.configure(text="🔄 Refresh")
             else:
+                logger.warning("LM Studio connection failed")
                 self.connection_indicator.configure(text="●", text_color="#e74c3c")
                 self.connection_label.configure(text="Disconnected", text_color="#e74c3c")
                 self._update_status("Cannot connect to LM Studio - Please start the server")
@@ -760,11 +1109,13 @@ class DeepAgentsGUI(ctk.CTk):
         # Run async function in a new thread with its own event loop
         def run_async_check():
             try:
+                logger.debug("Starting async connection check in thread")
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 loop.run_until_complete(check())
                 loop.close()
             except Exception as e:
+                logger.error(f"Connection check thread error: {str(e)}")
                 self.after(0, lambda: self._update_status(f"Connection error: {str(e)}"))
         
         thread = threading.Thread(target=run_async_check, daemon=True)
@@ -854,6 +1205,8 @@ class DeepAgentsGUI(ctk.CTk):
     def _process_message(self, message: str):
         """Process message in background thread."""
         try:
+            logger.info(f"Processing message: {message[:50]}...")
+            
             # Get model - use selected model from dropdown if available
             model_name = self.settings.get("model_name")
             # If no model selected in settings but we have a selection from dropdown, use that
@@ -862,12 +1215,13 @@ class DeepAgentsGUI(ctk.CTk):
                 if selected and selected not in ("Select model...", "No connection"):
                     model_name = selected
             
+            logger.info(f"Using model: {model_name or 'local-model'}")
             model = self.lmstudio_client.get_chat_model(
                 model_name,
                 self.settings["temperature"]
             )
             
-            # Get tools
+            # Get all available tools
             tools = [
                 SimpleFilesystemTools.read_file,
                 SimpleFilesystemTools.write_file,
@@ -875,33 +1229,67 @@ class DeepAgentsGUI(ctk.CTk):
                 SimpleFilesystemTools.execute_command,
             ]
             
+            # Add web search tools if available
+            if DDGS_AVAILABLE:
+                tools.extend([
+                    WebSearchTools.web_search,
+                    WebSearchTools.news_search,
+                ])
+                logger.debug("Added web search tools")
+            
+            # Add math tools if available
+            if SYMPY_AVAILABLE:
+                tools.extend([
+                    MathTools.calculate,
+                    MathTools.solve_equation,
+                ])
+                logger.debug("Added math tools")
+            
+            # Add image tools if available
+            if PIL_AVAILABLE:
+                tools.append(ImageTools.get_image_info)
+                logger.debug("Added image tools")
+            
+            logger.info(f"Total tools available: {len(tools)}")
+            tool_names = [t.name for t in tools]
+            logger.debug(f"Tool names: {tool_names}")
+            
             # Create agent - use deepagents if available, otherwise basic LangGraph
             if DEEPAGENTS_AVAILABLE:
                 # Use full DeepAgents with all features
+                logger.info("Creating DeepAgent with all tools")
                 agent = create_deep_agent(
                     model=model,
                     tools=tools,
                     system_prompt=(
-                        "You are a helpful AI assistant with access to filesystem tools. "
-                        "You can read files, write files, list directories, and execute safe shell commands. "
-                        "Always be helpful and thorough in completing tasks."
+                        "You are a helpful AI assistant with access to multiple tools including:\n"
+                        "- Filesystem operations (read/write files, list directories)\n"
+                        "- Web search for current information\n"
+                        "- Mathematical calculations and equation solving\n"
+                        "- Image information retrieval\n"
+                        "- Safe shell command execution\n"
+                        "Always be helpful and thorough in completing tasks. Use tools when appropriate."
                     )
                 )
             else:
                 # Fallback to basic LangGraph ReAct agent
+                logger.info("Creating LangGraph ReAct agent (deepagents not available)")
                 from langgraph.prebuilt import create_react_agent
                 agent = create_react_agent(model, tools)
             
             # Run agent
             config = {"recursion_limit": 100}
+            logger.info("Invoking agent...")
             response = agent.invoke(
                 {"messages": self.conversation_history},
                 config=config
             )
+            logger.info("Agent invocation complete")
             
             # Get assistant response
             assistant_message = response["messages"][-1]
             assistant_content = assistant_message.content if hasattr(assistant_message, 'content') else str(assistant_message)
+            logger.info(f"Response length: {len(assistant_content)} characters")
             
             # Add to history
             self.conversation_history.append(AIMessage(content=assistant_content))
@@ -910,6 +1298,7 @@ class DeepAgentsGUI(ctk.CTk):
             self.after(0, lambda: self._display_assistant_response(assistant_content))
             
         except Exception as e:
+            logger.error(f"Message processing failed: {str(e)}", exc_info=True)
             error_msg = f"Error: {str(e)}\n\nPlease ensure LM Studio is running and a model is loaded."
             self.after(0, lambda: self._display_assistant_response(error_msg))
         
