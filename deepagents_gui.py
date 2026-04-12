@@ -254,7 +254,7 @@ class SettingsDialog(ctk.CTkToplevel):
         super().__init__(parent)
         
         self.title("Settings")
-        self.geometry("500x400")
+        self.geometry("550x500")
         self.resizable(False, False)
         
         self.save_callback = save_callback
@@ -361,14 +361,55 @@ class SettingsDialog(ctk.CTkToplevel):
             font=ctk.CTkFont(size=13)
         ).pack(anchor="w")
         
+        workdir_entry_frame = ctk.CTkFrame(workdir_frame, fg_color="transparent")
+        workdir_entry_frame.pack(fill="x", pady=5)
+        
         self.workdir_entry = ctk.CTkEntry(
-            workdir_frame,
-            width=400,
+            workdir_entry_frame,
+            width=320,
             placeholder_text=str(Path.cwd())
         )
-        self.workdir_entry.pack(fill="x", pady=5)
+        self.workdir_entry.pack(side="left", fill="x", expand=True)
         if self.current_settings.get("working_dir", ""):
             self.workdir_entry.insert(0, self.current_settings.get("working_dir", str(Path.cwd())))
+        
+        browse_btn = ctk.CTkButton(
+            workdir_entry_frame,
+            text="Browse...",
+            command=self._browse_workdir,
+            width=80
+        )
+        browse_btn.pack(side="right", padx=(10, 0))
+        
+        # Project folder
+        project_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        project_frame.pack(fill="x", pady=10)
+        
+        ctk.CTkLabel(
+            project_frame,
+            text="Project Folder (optional):",
+            font=ctk.CTkFont(size=13)
+        ).pack(anchor="w")
+        
+        project_entry_frame = ctk.CTkFrame(project_frame, fg_color="transparent")
+        project_entry_frame.pack(fill="x", pady=5)
+        
+        self.project_entry = ctk.CTkEntry(
+            project_entry_frame,
+            width=320,
+            placeholder_text="Same as working directory"
+        )
+        self.project_entry.pack(side="left", fill="x", expand=True)
+        if self.current_settings.get("project_folder", ""):
+            self.project_entry.insert(0, self.current_settings.get("project_folder", ""))
+        
+        browse_project_btn = ctk.CTkButton(
+            project_entry_frame,
+            text="Browse...",
+            command=self._browse_project,
+            width=80
+        )
+        browse_project_btn.pack(side="right", padx=(10, 0))
         
         # Buttons
         button_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
@@ -396,9 +437,27 @@ class SettingsDialog(ctk.CTkToplevel):
         self.current_settings["model_name"] = self.model_entry.get() or None
         self.current_settings["temperature"] = self.temp_slider.get()
         self.current_settings["working_dir"] = self.workdir_entry.get() or str(Path.cwd())
+        self.current_settings["project_folder"] = self.project_entry.get() or ""
         
         self.save_callback(self.current_settings)
         self.destroy()
+    
+    def _browse_workdir(self):
+        """Open file dialog to select working directory."""
+        import tkinter.filedialog as fd
+        dirname = fd.askdirectory(initialdir=self.current_settings.get("working_dir", str(Path.cwd())))
+        if dirname:
+            self.workdir_entry.delete(0, 'end')
+            self.workdir_entry.insert(0, dirname)
+    
+    def _browse_project(self):
+        """Open file dialog to select project folder."""
+        import tkinter.filedialog as fd
+        initial_dir = self.current_settings.get("project_folder", "") or self.current_settings.get("working_dir", str(Path.cwd()))
+        dirname = fd.askdirectory(initialdir=initial_dir)
+        if dirname:
+            self.project_entry.delete(0, 'end')
+            self.project_entry.insert(0, dirname)
 
 
 class DeepAgentsGUI(ctk.CTk):
@@ -424,6 +483,7 @@ class DeepAgentsGUI(ctk.CTk):
         self.conversation_history: list = []
         self.is_processing = False
         self.current_tool_calls: list = []
+        self.tasks: list = []  # List of tasks/conversations
         
         # Setup UI
         self._setup_ui()
@@ -455,8 +515,9 @@ class DeepAgentsGUI(ctk.CTk):
         header.grid_columnconfigure(1, weight=0)  # Connection indicator
         header.grid_columnconfigure(2, weight=0)  # Connect button
         header.grid_columnconfigure(3, weight=0)  # Model dropdown
-        header.grid_columnconfigure(4, weight=0)  # Settings button
-        header.grid_columnconfigure(5, weight=0)  # Clear button
+        header.grid_columnconfigure(4, weight=0)  # New Task button
+        header.grid_columnconfigure(5, weight=0)  # Settings button
+        header.grid_columnconfigure(6, weight=0)  # Clear button
         
         # Logo/Title
         title_frame = ctk.CTkFrame(header, fg_color="transparent")
@@ -515,6 +576,16 @@ class DeepAgentsGUI(ctk.CTk):
         )
         self.model_dropdown.grid(row=0, column=3, padx=10, pady=10)
         
+        # New Task button
+        new_task_btn = ctk.CTkButton(
+            header,
+            text="📄 New Task",
+            command=self._new_task,
+            width=80,
+            height=30
+        )
+        new_task_btn.grid(row=0, column=4, padx=10, pady=10)
+        
         # Settings button
         settings_btn = ctk.CTkButton(
             header,
@@ -523,7 +594,7 @@ class DeepAgentsGUI(ctk.CTk):
             width=80,
             height=30
         )
-        settings_btn.grid(row=0, column=4, padx=10, pady=10)
+        settings_btn.grid(row=0, column=5, padx=10, pady=10)
         
         # Clear chat button
         clear_btn = ctk.CTkButton(
@@ -534,7 +605,7 @@ class DeepAgentsGUI(ctk.CTk):
             height=30,
             fg_color="#e74c3c"
         )
-        clear_btn.grid(row=0, column=5, padx=10, pady=10)
+        clear_btn.grid(row=0, column=6, padx=10, pady=10)
     
     def _create_main_area(self):
         """Create main content area with chat and tools."""
@@ -686,14 +757,18 @@ class DeepAgentsGUI(ctk.CTk):
                 # Update connect button text
                 self.connect_btn.configure(text="🔄 Connect")
         
-        # Run async function
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+        # Run async function in a new thread with its own event loop
+        def run_async_check():
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(check())
+                loop.close()
+            except Exception as e:
+                self.after(0, lambda: self._update_status(f"Connection error: {str(e)}"))
         
-        loop.create_task(check())
+        thread = threading.Thread(target=run_async_check, daemon=True)
+        thread.start()
     
     def _on_model_selected(self, selected_model: str):
         """Handle model selection from dropdown."""
@@ -713,6 +788,24 @@ class DeepAgentsGUI(ctk.CTk):
         self.settings = new_settings
         self.lmstudio_client = LMStudioClient(self.settings["lmstudio_url"])
         self._check_lmstudio_connection()
+    
+    def _new_task(self):
+        """Create a new task/conversation."""
+        if self.is_processing:
+            self._update_status("Cannot create new task while processing...")
+            return
+        
+        # Save current conversation to tasks list (optional - could be expanded)
+        if self.conversation_history:
+            self.tasks.append({
+                "history": self.conversation_history.copy(),
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "name": f"Task {len(self.tasks) + 1}"
+            })
+        
+        # Clear current conversation
+        self._clear_chat()
+        self._update_status("New task created")
     
     def _clear_chat(self):
         """Clear chat history."""
