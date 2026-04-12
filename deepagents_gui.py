@@ -302,7 +302,8 @@ class SettingsDialog(ctk.CTkToplevel):
             placeholder_text="http://localhost:1234"
         )
         self.url_entry.pack(fill="x", pady=5)
-        self.url_entry.insert(0, self.current_settings.get("lmstudio_url", "http://localhost:1234"))
+        if self.current_settings.get("lmstudio_url", ""):
+            self.url_entry.insert(0, self.current_settings.get("lmstudio_url", "http://localhost:1234"))
         
         # Model name
         model_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
@@ -320,7 +321,8 @@ class SettingsDialog(ctk.CTkToplevel):
             placeholder_text="Leave empty for default"
         )
         self.model_entry.pack(fill="x", pady=5)
-        self.model_entry.insert(0, self.current_settings.get("model_name", ""))
+        if self.current_settings.get("model_name", ""):
+            self.model_entry.insert(0, self.current_settings.get("model_name", ""))
         
         # Temperature
         temp_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
@@ -365,7 +367,8 @@ class SettingsDialog(ctk.CTkToplevel):
             placeholder_text=str(Path.cwd())
         )
         self.workdir_entry.pack(fill="x", pady=5)
-        self.workdir_entry.insert(0, self.current_settings.get("working_dir", str(Path.cwd())))
+        if self.current_settings.get("working_dir", ""):
+            self.workdir_entry.insert(0, self.current_settings.get("working_dir", str(Path.cwd())))
         
         # Buttons
         button_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
@@ -447,11 +450,17 @@ class DeepAgentsGUI(ctk.CTk):
         """Create header with controls."""
         header = ctk.CTkFrame(self, height=60, fg_color="#2b2b2b")
         header.grid(row=0, column=0, sticky="ew", padx=0, pady=0)
-        header.grid_columnconfigure(1, weight=1)
+        # Configure grid columns for header elements
+        header.grid_columnconfigure(0, weight=1)  # Title section (expandable)
+        header.grid_columnconfigure(1, weight=0)  # Connection indicator
+        header.grid_columnconfigure(2, weight=0)  # Connect button
+        header.grid_columnconfigure(3, weight=0)  # Model dropdown
+        header.grid_columnconfigure(4, weight=0)  # Settings button
+        header.grid_columnconfigure(5, weight=0)  # Clear button
         
         # Logo/Title
         title_frame = ctk.CTkFrame(header, fg_color="transparent")
-        title_frame.grid(row=0, column=0, padx=20, pady=10)
+        title_frame.grid(row=0, column=0, padx=20, pady=10, sticky="w")
         
         ctk.CTkLabel(
             title_frame,
@@ -482,28 +491,50 @@ class DeepAgentsGUI(ctk.CTk):
             font=ctk.CTkFont(size=12),
             text_color="#e74c3c"
         )
-        self.connection_label.grid(row=0, column=1, sticky="e", padx=(10, 20))
+        self.connection_label.grid(row=0, column=1, sticky="e", padx=(10, 5))
+        
+        # Connect/Refresh button
+        self.connect_btn = ctk.CTkButton(
+            header,
+            text="🔄 Connect",
+            command=self._check_lmstudio_connection,
+            width=90,
+            height=30
+        )
+        self.connect_btn.grid(row=0, column=2, padx=5, pady=10)
+        
+        # Model selection dropdown
+        self.model_var = ctk.StringVar(value="Select model...")
+        self.model_dropdown = ctk.CTkOptionMenu(
+            header,
+            variable=self.model_var,
+            values=[],
+            command=self._on_model_selected,
+            width=150,
+            height=30
+        )
+        self.model_dropdown.grid(row=0, column=3, padx=10, pady=10)
         
         # Settings button
         settings_btn = ctk.CTkButton(
             header,
             text="⚙ Settings",
             command=self._open_settings,
-            width=100,
+            width=80,
             height=30
         )
-        settings_btn.grid(row=0, column=2, padx=10, pady=10)
+        settings_btn.grid(row=0, column=4, padx=10, pady=10)
         
         # Clear chat button
         clear_btn = ctk.CTkButton(
             header,
             text="🗑 Clear Chat",
             command=self._clear_chat,
-            width=100,
+            width=80,
             height=30,
             fg_color="#e74c3c"
         )
-        clear_btn.grid(row=0, column=3, padx=10, pady=10)
+        clear_btn.grid(row=0, column=5, padx=10, pady=10)
     
     def _create_main_area(self):
         """Create main content area with chat and tools."""
@@ -638,10 +669,22 @@ class DeepAgentsGUI(ctk.CTk):
                 models = await self.lmstudio_client.get_available_models()
                 if models:
                     self.info_label.configure(text=f"Available models: {len(models)}")
+                    # Populate model dropdown
+                    self.model_dropdown.configure(values=models)
+                    if self.settings.get("model_name") and self.settings["model_name"] in models:
+                        self.model_var.set(self.settings["model_name"])
+                    else:
+                        self.model_var.set(models[0] if models else "Select model...")
+                    # Update connect button text
+                    self.connect_btn.configure(text="🔄 Refresh")
             else:
                 self.connection_indicator.configure(text="●", text_color="#e74c3c")
                 self.connection_label.configure(text="Disconnected", text_color="#e74c3c")
                 self._update_status("Cannot connect to LM Studio - Please start the server")
+                self.model_dropdown.configure(values=[])
+                self.model_var.set("No connection")
+                # Update connect button text
+                self.connect_btn.configure(text="🔄 Connect")
         
         # Run async function
         try:
@@ -651,6 +694,15 @@ class DeepAgentsGUI(ctk.CTk):
             asyncio.set_event_loop(loop)
         
         loop.create_task(check())
+    
+    def _on_model_selected(self, selected_model: str):
+        """Handle model selection from dropdown."""
+        if selected_model and selected_model not in ("Select model...", "No connection"):
+            self.settings["model_name"] = selected_model
+            self._update_status(f"Model selected: {selected_model}")
+            # Update connect button to show Refresh since we have a model selected
+            if hasattr(self, 'connect_btn'):
+                self.connect_btn.configure(text="🔄 Refresh")
     
     def _open_settings(self):
         """Open settings dialog."""
@@ -709,9 +761,16 @@ class DeepAgentsGUI(ctk.CTk):
     def _process_message(self, message: str):
         """Process message in background thread."""
         try:
-            # Get model
+            # Get model - use selected model from dropdown if available
+            model_name = self.settings.get("model_name")
+            # If no model selected in settings but we have a selection from dropdown, use that
+            if not model_name and hasattr(self, 'model_var'):
+                selected = self.model_var.get()
+                if selected and selected not in ("Select model...", "No connection"):
+                    model_name = selected
+            
             model = self.lmstudio_client.get_chat_model(
-                self.settings["model_name"],
+                model_name,
                 self.settings["temperature"]
             )
             
