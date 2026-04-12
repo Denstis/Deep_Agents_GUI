@@ -1,1 +1,40 @@
-Nothing should be ignored based on the provided file changes. The only modified file is `deepagents_gui.py`, which is a Python source file and should not be ignored.
+```
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment
+.venv/
+venv/
+.env
+.env.local
+*.env.*
+
+# Logs
+*.log
+
+# Dependencies
+node_modules/
+
+# Coverage
+.coverage
+coverage/
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build
+dist/
+build/
+target/
+
+# Cache
+.mypy_cache/
+.pytest_cache/
+```
