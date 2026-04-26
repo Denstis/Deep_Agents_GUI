@@ -27,7 +27,9 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [2/5] Python найден...
+echo [2/5] Python найден!
+for /f "tokens=*" %%i in ('python --version') do set PYTHON_VERSION=%%i
+echo %PYTHON_VERSION%
 echo.
 
 REM Создание виртуального окружения если оно отсутствует

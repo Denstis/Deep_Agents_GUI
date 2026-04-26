@@ -16,8 +16,9 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-echo [OK] Python найден: 
-python --version
+echo [OK] Python найден!
+for /f "tokens=*" %%i in ('python --version') do set PYTHON_VERSION=%%i
+echo %PYTHON_VERSION%
 echo.
 
 :: Создание виртуального окружения
