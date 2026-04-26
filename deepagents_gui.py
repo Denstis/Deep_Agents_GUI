@@ -1355,17 +1355,44 @@ class DeepAgentsGUI(ctk.CTk):
             self.after(0, lambda: self._update_status(f"Processing... Tools: {', '.join(self.current_tool_names[:3])}..."))
             self.after(0, lambda: self._log_thinking_step("🔄 Запуск агента..."))
             
-            response = agent.invoke(
-                {"messages": self.conversation_history},
-                config=config
-            )
+            # Используем stream для отслеживания промежуточных шагов
+            all_messages = []
+            try:
+                for chunk in agent.stream({"messages": self.conversation_history}, config=config):
+                    if "messages" in chunk:
+                        for msg in chunk["messages"]:
+                            all_messages.append(msg)
+                            # Логируем размышления и вызовы инструментов
+                            if hasattr(msg, 'tool_calls') and msg.tool_calls:
+                                for tc in msg.tool_calls:
+                                    tool_name = tc.get('name', 'unknown') if isinstance(tc, dict) else getattr(tc, 'name', 'unknown')
+                                    tool_args = tc.get('arguments', {}) if isinstance(tc, dict) else getattr(tc, 'args', {})
+                                    self.after(0, lambda tn=tool_name, ta=tool_args: self._log_thinking_step(f"🔧 Вызов инструмента: {tn}({ta})"))
+                            elif hasattr(msg, 'content') and msg.content:
+                                content_preview = str(msg.content)[:80]
+                                if len(str(msg.content)) > 80:
+                                    content_preview += "..."
+                                self.after(0, lambda cp=content_preview: self._log_thinking_step(f"💭 Размышление: {cp}"))
+                            elif hasattr(msg, '__class__') and msg.__class__.__name__ == 'ToolMessage':
+                                result_preview = str(msg.content)[:60] if hasattr(msg, 'content') else ''
+                                if len(result_preview) > 60:
+                                    result_preview += "..."
+                                self.after(0, lambda rp=result_preview: self._log_thinking_step(f"✅ Результат: {rp}"))
+            except Exception as e:
+                logger.error(f"Stream error: {e}")
+                raise
+            
             logger.info("Agent invocation complete")
+            response = {"messages": all_messages}
             
             self.after(0, lambda: self._log_thinking_step("✅ Генерация ответа завершена"))
             
             # Get assistant response
-            assistant_message = response["messages"][-1]
-            assistant_content = assistant_message.content if hasattr(assistant_message, 'content') else str(assistant_message)
+            assistant_message = all_messages[-1] if all_messages else None
+            if assistant_message is None:
+                assistant_content = "No response generated"
+            else:
+                assistant_content = assistant_message.content if hasattr(assistant_message, 'content') else str(assistant_message)
             logger.info(f"Response length: {len(assistant_content)} characters")
             
             # Add to history

@@ -105,7 +105,7 @@ class ChatWindow(ctk.CTkScrollableFrame):
         )
         
         # Размещение с выравниванием по левому краю для ИИ, по правому для пользователя
-        sticky = 'w' if not is_user else 'e'
+        sticky = 'ew'  # Растягиваем на всю ширину
         bubble.grid(
             row=len(self._bubbles),
             column=0,
