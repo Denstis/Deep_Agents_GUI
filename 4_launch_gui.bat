@@ -18,36 +18,36 @@ if not exist "venv\Scripts\activate.bat" (
 :: Активация окружения
 call venv\Scripts\activate.bat
 
-:: Проверка наличия .env
+:: Загрузка переменных из .env если файл существует
 if exist ".env" (
     echo [OK] Файл .env найден, загрузка переменных окружения...
-    for /f "delims=" %%a in (.env) do (
-        echo %%a | findstr /r /c:"^[^#].*=" >nul && (
-            for /f "tokens=1,* delims==" %%b in ("%%a") do (
-                set "%%b=%%c"
-            )
-        )
+    for /f "tokens=1,* delims==" %%a in ('findstr /r /c:"^[^#].*=" .env') do (
+        set "%%a=%%b"
     )
 ) else (
-    echo [ПРЕДУПРЕЖДЕНИЕ] Файл .env не найден!
-    echo Убедитесь, что переменные окружения установлены вручную.
-    echo Или запустите '3_setup_env.bat' для настройки.
+    echo [INFO] Файл .env не найден, используются переменные системы.
+)
+
+:: Проверка ключа OpenAI или LM Studio
+if "%OPENAI_API_KEY%"=="" if "%LM_STUDIO_API_BASE%"=="" (
+    echo [ОШИБКА] Ни OPENAI_API_KEY, ни LM_STUDIO_API_BASE не установлены!
     echo.
-    timeout /t 3 /nobreak >nul
+    echo Запустите '3_setup_env.bat' для настройки API ключей.
+    echo Или настройте LM Studio в интерфейсе приложения.
+    pause
+    exit /b 1
 )
 
-:: Проверка ключа OpenAI
-if "%OPENAI_API_KEY%"=="" (
-    if "%OPENAI_API_KEY%"=="" (
-        echo [ОШИБКА] OPENAI_API_KEY не установлен!
-        echo.
-        echo Запустите '3_setup_env.bat' для настройки API ключей.
-        pause
-        exit /b 1
-    )
+if not "%OPENAI_API_KEY%"=="" (
+    echo [OK] OPENAI_API_KEY установлен.
+)
+if not "%LM_STUDIO_API_BASE%"=="" (
+    echo [OK] LM_STUDIO_API_BASE установлен: %LM_STUDIO_API_BASE%
+)
+if "%OPENAI_API_KEY%"=="" if not "%LM_STUDIO_API_BASE%"=="" (
+    echo [INFO] Режим LM Studio активирован.
 )
 
-echo [OK] OPENAI_API_KEY установлен.
 if "%LANGSMITH_API_KEY%"=="" (
     echo [INFO] LANGSMITH_API_KEY не установлен (трассировка отключена).
 ) else (
