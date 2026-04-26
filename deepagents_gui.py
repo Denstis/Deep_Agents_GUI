@@ -532,13 +532,13 @@ class MessageBubble(ctk.CTkFrame):
         )
         self.role_label.pack(fill="x", padx=5, pady=(5, 0))
         
-        # Message content frame
+        # Message content frame - use fixed width to prevent stretching
         self.message_frame = ctk.CTkFrame(
             self,
             corner_radius=10,
             fg_color="#2b2b2b" if role == "assistant" else "#3a3a3a"
         )
-        self.message_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        self.message_frame.pack(fill="x", expand=False, padx=5, pady=5, anchor="w")
         
         # Text widget with scrollbar for long messages
         self.message_text = ctk.CTkTextbox(
@@ -548,7 +548,7 @@ class MessageBubble(ctk.CTkFrame):
             height=1,  # Start with minimal height, will auto-resize
             activate_scrollbars=False  # Disable scrollbar for auto-height
         )
-        self.message_text.pack(fill="both", expand=True, padx=10, pady=10)
+        self.message_text.pack(fill="both", expand=False, padx=10, pady=10, anchor="w")
         self.message_text.insert("0.0", message)
         self.message_text.configure(state="disabled")  # Make read-only
         
@@ -597,12 +597,19 @@ class MessageBubble(ctk.CTkFrame):
     
     def _auto_resize_text(self):
         """Auto-resize text widget to fit content."""
-        # Get number of lines in the text
-        line_count = int(self.message_text.index('end-1c').split('.')[0])
-        # Set height to fit all lines (with a reasonable max)
-        max_height = 25
-        new_height = min(max(line_count, 3), max_height)
-        self.message_text.configure(height=new_height)
+        try:
+            # Get number of lines in the text
+            line_count = int(self.message_text.index('end-1c').split('.')[0])
+            # Set height to fit all lines (with a reasonable max)
+            max_height = 25
+            new_height = min(max(line_count, 3), max_height)
+            self.message_text.configure(height=new_height)
+            
+            # Force the parent frames to update their layout
+            self.message_frame.update_idletasks()
+            self.update_idletasks()
+        except Exception as e:
+            logger.error(f"Auto-resize failed: {e}")
     
     def _toggle_expand(self):
         """Toggle between expanded and collapsed state."""
@@ -620,13 +627,16 @@ class MessageBubble(ctk.CTkFrame):
     
     def update_message(self, new_content: str):
         """Update the message content (for streaming)."""
-        self.full_message = new_content
-        self.message_text.configure(state="normal")
-        self.message_text.delete("0.0", "end")
-        self.message_text.insert("0.0", new_content)
-        self.message_text.configure(state="disabled")
-        # Auto-resize after update
-        self._auto_resize_text()
+        try:
+            self.full_message = new_content
+            self.message_text.configure(state="normal")
+            self.message_text.delete("0.0", "end")
+            self.message_text.insert("0.0", new_content)
+            self.message_text.configure(state="disabled")
+            # Auto-resize after update
+            self._auto_resize_text()
+        except Exception as e:
+            logger.error(f"Message update failed: {e}")
 
 
 class SettingsDialog(ctk.CTkToplevel):
@@ -1433,7 +1443,11 @@ class DeepAgentsGUI(ctk.CTk):
             role=role,
             fg_color="transparent"
         )
-        bubble.grid(row=row, column=0, sticky="ew", pady=5)
+        # Use sticky="w" to align left and prevent horizontal stretching
+        bubble.grid(row=row, column=0, sticky="w", pady=5, padx=10)
+        
+        # Force layout update to ensure proper sizing
+        self.chat_canvas.update_idletasks()
         
         # Auto-scroll to bottom
         self.chat_canvas._scrollbar.set(1.0, 1.0)
@@ -1629,9 +1643,6 @@ class DeepAgentsGUI(ctk.CTk):
         if not message:
             return
         
-        # Reset last assistant bubble when user sends new message
-        self.last_assistant_bubble = None
-        
         # Add user message to UI
         self._add_message_bubble(message, role="user")
         self.conversation_history.append(HumanMessage(content=message))
@@ -1789,14 +1800,9 @@ class DeepAgentsGUI(ctk.CTk):
     
     def _display_assistant_response(self, content: str):
         """Display assistant response in chat."""
-        # Check if we need to update existing bubble or create new one
-        if self.last_assistant_bubble is not None:
-            # Update existing bubble instead of creating new one
-            self.last_assistant_bubble.update_message(content)
-        else:
-            # Create new bubble
-            bubble = self._add_message_bubble(content, role="assistant")
-            self.last_assistant_bubble = bubble
+        # Always create a new bubble for assistant response to avoid overwriting
+        bubble = self._add_message_bubble(content, role="assistant")
+        self.last_assistant_bubble = bubble
         
         # Store reference for potential updates
         self.current_bubble = self.last_assistant_bubble
