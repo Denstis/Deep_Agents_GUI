@@ -1,0 +1,183 @@
+"""
+Класс MessageBubble для отображения сообщений в чате.
+
+Требования:
+- Сообщения на всю ширину контейнера (с учётом отступов)
+- Динамическая высота на основе содержимого
+- Без фиксированных значений высоты в пикселях
+- Поддержка форматирования кода (блоки ```)
+- Выравнивание: пользователь (вправо), ИИ (влево)
+"""
+
+import customtkinter as ctk
+import tkinter as tk
+from typing import Optional, Callable
+import re
+
+
+class MessageBubble(ctk.CTkFrame):
+    """
+    Виджет сообщения в чате с динамической высотой и полной шириной.
+    
+    Атрибуты:
+        is_user (bool): True если сообщение от пользователя
+        text (str): Текст сообщения
+        on_copy (Callable): Callback при копировании текста
+    """
+    
+    def __init__(
+        self,
+        master: any,
+        text: str,
+        is_user: bool = False,
+        on_copy: Optional[Callable] = None,
+        **kwargs
+    ):
+        # Устанавливаем цвета по умолчанию только если не переданы
+        if 'fg_color' not in kwargs:
+            kwargs['fg_color'] = '#2b7da0' if is_user else '#3a3a3a'
+        if 'corner_radius' not in kwargs:
+            kwargs['corner_radius'] = 12
+        if 'border_width' not in kwargs:
+            kwargs['border_width'] = 0
+        
+        super().__init__(master, **kwargs)
+        
+        self.is_user = is_user
+        self.text = text
+        self.on_copy = on_copy
+        self._text_widget: Optional[ctk.CTkTextbox] = None
+        
+        # Конфигурация отступов
+        self._padding_x = 10
+        self._padding_y = 8
+        
+        # Настройка grid для растягивания на всю ширину
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(0, weight=1)
+        
+        # Создание текстового виджета
+        self._create_text_widget()
+        
+        # Вставка текста с обработкой кода
+        self._insert_formatted_text(text)
+        
+        # Привязка события копирования
+        self._bind_copy_event()
+    
+    def _create_text_widget(self):
+        """Создание и настройка текстового виджета."""
+        self._text_widget = ctk.CTkTextbox(
+            self,
+            wrap=tk.WORD,
+            font=('Consolas', 12) if self.is_user else ('Arial', 12),
+            border_width=0,
+            fg_color='transparent',
+            text_color='#ffffff',
+            state='disabled' if not self.is_user else 'normal',
+            cursor='arrow' if not self.is_user else 'xterm',
+        )
+        
+        # Размещение с отступами
+        self._text_widget.grid(
+            row=0, 
+            column=0, 
+            sticky='nsew',
+            padx=self._padding_x,
+            pady=self._padding_y
+        )
+        
+        # Настройка тегов для форматирования
+        self._setup_tags()
+    
+    def _setup_tags(self):
+        """Настройка тегов для подсветки кода."""
+        text_widget = self._text_widget.winfo_toplevel().nametowidget(
+            self._text_widget._w
+        ) if hasattr(self._text_widget, '_w') else self._text_widget
+        
+        # Тег для блоков кода
+        self._text_widget.tag_configure(
+            'code',
+            font=('Consolas', 11),
+            background='#1e1e1e',
+            foreground='#00ff00',
+            lmargin1=10,
+            lmargin2=10,
+            rmargin=10,
+            spacing1=5,
+            spacing3=5
+        )
+        
+        # Тег для обычного текста
+        self._text_widget.tag_configure(
+            'normal',
+            font=('Arial', 12),
+            foreground='#ffffff'
+        )
+    
+    def _insert_formatted_text(self, text: str):
+        """
+        Вставка текста с обработкой блоков кода.
+        
+        Блоки кода определяются по ``` и выделяются отдельным тегом.
+        """
+        self._text_widget.configure(state='normal')
+        self._text_widget.delete('1.0', tk.END)
+        
+        # Разделение текста на блоки кода и обычный текст
+        parts = re.split(r'(```[\s\S]*?```)', text)
+        
+        for part in parts:
+            if part.startswith('```') and part.endswith('```'):
+                # Блок кода (убираем обратные кавычки)
+                code_content = part[3:-3].strip()
+                # Удаляем указание языка если есть
+                if '\n' in code_content:
+                    lang, code = code_content.split('\n', 1)
+                    code_content = code
+                self._text_widget.insert(tk.END, code_content + '\n', 'code')
+            else:
+                # Обычный текст
+                self._text_widget.insert(tk.END, part, 'normal')
+        
+        self._text_widget.configure(state='disabled' if not self.is_user else 'normal')
+    
+    def _bind_copy_event(self):
+        """Привязка события двойного клика для копирования."""
+        def on_double_click(event):
+            if self.on_copy:
+                self.on_copy(self.text)
+        
+        self._text_widget.bind('<Double-Button-1>', on_double_click)
+    
+    def update_text(self, text: str, append: bool = False):
+        """
+        Обновление текста сообщения.
+        
+        Args:
+            text: Новый текст или добавляемый фрагмент
+            append: Если True, текст добавляется в конец
+        """
+        if append:
+            self.text += text
+            self._text_widget.configure(state='normal')
+            self._text_widget.insert(tk.END, text, 'normal')
+            self._text_widget.configure(state='disabled' if not self.is_user else 'normal')
+        else:
+            self.text = text
+            self._insert_formatted_text(text)
+    
+    def get_height(self) -> int:
+        """
+        Получение текущей высоты виджета.
+        
+        Returns:
+            int: Высота в пикселях
+        """
+        return self.winfo_reqheight()
+    
+    def copy_to_clipboard(self):
+        """Копирование текста в буфер обмена."""
+        self.clipboard_clear()
+        self.clipboard_append(self.text)
