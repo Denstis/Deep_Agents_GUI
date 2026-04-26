@@ -545,15 +545,15 @@ class MessageBubble(ctk.CTkFrame):
             self.message_frame,
             wrap="word",
             font=ctk.CTkFont(size=13),
-            height=1,  # Start with minimal height, will auto-resize
+            height=10,  # Start with reasonable height
             activate_scrollbars=False  # Disable scrollbar for auto-height
         )
         self.message_text.pack(fill="both", expand=False, padx=10, pady=10, anchor="w")
         self.message_text.insert("0.0", message)
         self.message_text.configure(state="disabled")  # Make read-only
         
-        # Auto-resize text widget to fit content
-        self._auto_resize_text()
+        # Auto-resize text widget to fit content AFTER inserting text
+        self.after(10, self._auto_resize_text)  # Delay to ensure layout is ready
         
         # Button frame for expand/collapse and copy
         self.btn_frame = ctk.CTkFrame(self.message_frame, fg_color="transparent")
@@ -600,6 +600,7 @@ class MessageBubble(ctk.CTkFrame):
         try:
             # Get number of lines in the text
             line_count = int(self.message_text.index('end-1c').split('.')[0])
+            logger.debug(f"Auto-resize: {line_count} lines detected")
             # Set height to fit all lines (with a reasonable max)
             max_height = 25
             new_height = min(max(line_count, 3), max_height)
@@ -608,8 +609,10 @@ class MessageBubble(ctk.CTkFrame):
             # Force the parent frames to update their layout
             self.message_frame.update_idletasks()
             self.update_idletasks()
+            self.master.update_idletasks()
+            logger.debug(f"Auto-resize complete: height={new_height}")
         except Exception as e:
-            logger.error(f"Auto-resize failed: {e}")
+            logger.error(f"Auto-resize failed: {e}", exc_info=True)
     
     def _toggle_expand(self):
         """Toggle between expanded and collapsed state."""
@@ -1339,7 +1342,8 @@ class DeepAgentsGUI(ctk.CTk):
             fg_color="transparent"
         )
         self.chat_canvas.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
-        self.chat_canvas.grid_columnconfigure(0, weight=1)
+        # Don't configure column weight to prevent horizontal stretching of messages
+        # self.chat_canvas.grid_columnconfigure(0, weight=1)
         
         # Welcome message
         self._add_welcome_message()
@@ -1443,8 +1447,9 @@ class DeepAgentsGUI(ctk.CTk):
             role=role,
             fg_color="transparent"
         )
-        # Use sticky="w" to align left and prevent horizontal stretching
-        bubble.grid(row=row, column=0, sticky="w", pady=5, padx=10)
+        # Use sticky="nw" to align left and prevent horizontal stretching
+        # Allow vertical expansion but not horizontal
+        bubble.grid(row=row, column=0, sticky="nw", pady=5, padx=10)
         
         # Force layout update to ensure proper sizing
         self.chat_canvas.update_idletasks()
