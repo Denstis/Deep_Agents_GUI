@@ -63,7 +63,13 @@ class MessageBubble(ctk.CTkFrame):
             on_copy: Optional callback when message is copied
             **kwargs: Additional arguments passed to CTkFrame
         """
-        super().__init__(master, fg_color="transparent", corner_radius=0, **kwargs)
+        # Ensure fg_color is set correctly, but allow override via kwargs
+        if 'fg_color' not in kwargs:
+            kwargs['fg_color'] = "transparent"
+        if 'corner_radius' not in kwargs:
+            kwargs['corner_radius'] = 0
+            
+        super().__init__(master, **kwargs)
         
         self.role = role
         self.is_expanded = False
