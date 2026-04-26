@@ -937,7 +937,7 @@ class DeepAgentsGUI(ctk.CTk):
         logger.info(f"Displaying welcome message, tools available: {tools_available}")
         
         # Use new ChatWindow method
-        self.chat_canvas.add_message(welcome_text, is_user=False)
+        self.chat_canvas.add_message(welcome_text, is_user=False, immediate=True)
     
     def _add_message_bubble(self, message: str, role: str = "user") -> MessageBubble:
         """Add a message bubble to the chat."""
@@ -945,7 +945,7 @@ class DeepAgentsGUI(ctk.CTk):
         
         # Use new ChatWindow method instead of direct MessageBubble creation
         is_user = (role == "user")
-        self.chat_canvas.add_message(message, is_user=is_user)
+        self.chat_canvas.add_message(message, is_user=is_user, immediate=True)
         
         # Return None or last bubble if needed
         return self.chat_canvas._bubbles[-1] if self.chat_canvas._bubbles else None
@@ -1139,8 +1139,8 @@ class DeepAgentsGUI(ctk.CTk):
         if not message:
             return
         
-        # Add user message to UI using new ChatWindow
-        self.chat_canvas.add_message(message, is_user=True)
+        # Add user message to UI using new ChatWindow (immediate=True для главного потока)
+        self.chat_canvas.add_message(message, is_user=True, immediate=True)
         self.conversation_history.append(HumanMessage(content=message))
         
         # Clear input
@@ -1296,8 +1296,8 @@ class DeepAgentsGUI(ctk.CTk):
     
     def _display_assistant_response(self, content: str):
         """Display assistant response in chat."""
-        # Use new ChatWindow method
-        self.chat_canvas.add_message(content, is_user=False)
+        # Use new ChatWindow method with immediate=True для вызова из главного потока
+        self.chat_canvas.add_message(content, is_user=False, immediate=True)
 
 
 def main():

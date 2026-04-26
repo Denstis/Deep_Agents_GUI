@@ -145,19 +145,24 @@ class ChatWindow(ctk.CTkScrollableFrame):
     
     # === Публичные методы для внешнего использования ===
     
-    def add_message(self, text: str, is_user: bool):
+    def add_message(self, text: str, is_user: bool, immediate: bool = False):
         """
         Добавление нового сообщения (потокобезопасно).
         
         Args:
             text: Текст сообщения
             is_user: True если сообщение от пользователя
+            immediate: Если True, добавляет немедленно (для вызова из главного потока)
         """
-        self.message_queue.put({
-            'action': 'add_message',
-            'text': text,
-            'is_user': is_user
-        })
+        if immediate:
+            # Прямой вызов для использования из главного потока
+            self._do_add_message(text, is_user)
+        else:
+            self.message_queue.put({
+                'action': 'add_message',
+                'text': text,
+                'is_user': is_user
+            })
     
     def update_current_message(self, text: str, append: bool = True):
         """
