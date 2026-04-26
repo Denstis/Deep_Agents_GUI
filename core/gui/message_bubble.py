@@ -302,39 +302,15 @@ class MessageBubble(ctk.CTkFrame):
         text_line_count = 0
         code_block_count = 0
         
-        # Проходим по всем строкам и элементам
-        last_index = '1.0'
-        while True:
-            # Проверяем, есть ли окно (блок кода) на текущей позиции
-            windows = internal_text.window_names(last_index)
-            
-            # Ищем следующую позицию с контентом
-            next_pos = internal_text.index(f'{last_index} lineend + 1 line')
-            
-            if next_pos == last_index:
-                break
-                
-            # Проверяем наличие окна (блока кода) между last_index и next_pos
-            found_window = False
-            for pos in [last_index, f'{last_index} + 0.5 lines']:
-                try:
-                    window_names = internal_text.window_names(pos)
-                    if window_names:
-                        found_window = True
-                        code_block_count += 1
-                        break
-                except:
-                    pass
-            
-            if not found_window:
-                # Это обычная текстовая строка
-                line_text = internal_text.get(last_index, f'{last_index} lineend')
-                if line_text.strip():
-                    text_line_count += 1
-            
-            last_index = next_pos
-            if last_index == 'end':
-                break
+        # Проходим по всем строкам текста (без window_names, который может не работать)
+        try:
+            total_lines = int(float(internal_text.index('end-1c').split('.')[0]))
+            text_line_count = total_lines
+        except:
+            text_line_count = 1
+        
+        # Проверяем наличие блоков кода через winfo_children()
+        code_block_count = len(self._code_blocks)
         
         # Расчёт высоты текстовой части
         if text_line_count > 0:
