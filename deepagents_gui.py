@@ -601,16 +601,17 @@ class MessageBubble(ctk.CTkFrame):
             # Get number of lines in the text
             line_count = int(self.message_text.index('end-1c').split('.')[0])
             logger.debug(f"Auto-resize: {line_count} lines detected")
-            # Set height to fit all lines (with a reasonable max)
-            max_height = 25
-            new_height = min(max(line_count, 3), max_height)
+            # Set height to fit all lines (height is in lines, not pixels)
+            # Allow up to 40 lines before requiring manual expansion
+            max_lines = 40
+            new_height = min(max(line_count, 3), max_lines)
             self.message_text.configure(height=new_height)
             
             # Force the parent frames to update their layout
             self.message_frame.update_idletasks()
             self.update_idletasks()
             self.master.update_idletasks()
-            logger.debug(f"Auto-resize complete: height={new_height}")
+            logger.debug(f"Auto-resize complete: height={new_height} lines")
         except Exception as e:
             logger.error(f"Auto-resize failed: {e}", exc_info=True)
     
