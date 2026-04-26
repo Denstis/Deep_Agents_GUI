@@ -15,7 +15,7 @@ import os
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from deepagents.tools import (
+from core.tools import (
     create_filesystem_tools,
     get_all_tool_metadata,
     ReadFileTool,

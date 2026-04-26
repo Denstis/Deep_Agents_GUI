@@ -41,8 +41,8 @@ import httpx
 from message_bubble import MessageBubble, calculate_text_height
 
 # Import modular components
-from deepagents.utils import LMStudioClient
-from deepagents.tools import SimpleFilesystemTools, get_execute_command_tool, WebSearchTools, MathTools
+from core.utils import LMStudioClient
+from core.tools import SimpleFilesystemTools, get_execute_command_tool, WebSearchTools, MathTools
 
 # Configure logging
 logging.basicConfig(
@@ -87,7 +87,7 @@ ctk.set_default_color_theme("blue")
 
 # Try to import deepagents if available
 try:
-    from deepagents import create_deep_agent
+    from core import create_deep_agent
     DEEPAGENTS_AVAILABLE = True
     logger.info("DeepAgents package loaded successfully")
 except ImportError:
@@ -140,8 +140,8 @@ class ImageTools:
             return f"Error getting image info: {str(e)}"
 
 
-# Note: Filesystem tools are now available via deepagents.tools module
-# Import them with: from deepagents.tools import create_filesystem_tools
+# Note: Filesystem tools are now available via core.tools module
+# Import them with: from core.tools import create_filesystem_tools
 
 
 # Old MessageBubble class has been moved to message_bubble.py module
