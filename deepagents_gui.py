@@ -210,23 +210,34 @@ class SimpleFilesystemTools:
     
     @staticmethod
     @tool
-    def execute_command(command: str) -> str:
-        """Execute a shell command (read-only operations recommended).
+    def execute_command(command: str, full_access: bool = False, allowed_commands: list = None) -> str:
+        """Execute a shell command with configurable security.
         
         Args:
             command: Shell command to execute.
+            full_access: If True, allow any command (dangerous!).
+            allowed_commands: List of allowed command prefixes (used when full_access=False).
             
         Returns:
             Command output or error message.
         """
         import subprocess
+        
+        if allowed_commands is None:
+            allowed_commands = ["ls", "dir", "cat", "head", "tail", "pwd", "echo", "find", "grep"]
+        
         try:
-            # Safety: Only allow read-only commands
-            readonly_prefixes = ["ls", "dir", "cat", "head", "tail", "pwd", "echo", "find", "grep"]
-            cmd_lower = command.lower().strip()
-            if not any(cmd_lower.startswith(prefix) for prefix in readonly_prefixes):
-                return "Error: Only read-only commands are allowed for safety."
+            # Security check
+            if not full_access:
+                cmd_lower = command.lower().strip()
+                # Extract base command (first word)
+                base_cmd = cmd_lower.split()[0] if cmd_lower else ""
+                
+                # Check against allowed commands
+                if not any(base_cmd == prefix or cmd_lower.startswith(prefix + " ") for prefix in allowed_commands):
+                    return f"Error: Command '{command}' is not allowed.\nAllowed commands: {', '.join(allowed_commands)}\nEnable full access in Settings > Security to run any command."
             
+            # Execute command
             result = subprocess.run(
                 command,
                 shell=True,
@@ -493,17 +504,29 @@ class MessageBubble(ctk.CTkFrame):
 
 
 class SettingsDialog(ctk.CTkToplevel):
-    """Settings dialog for configuring LM Studio connection."""
+    """Расширенные настройки с управлением инструментами и безопасностью."""
     
     def __init__(self, parent, current_settings: dict, save_callback: Callable):
         super().__init__(parent)
         
-        self.title("Settings")
-        self.geometry("550x500")
-        self.resizable(False, False)
+        self.title("Настройки DeepAgents")
+        self.geometry("900x700")
+        self.resizable(True, True)
+        self.minsize(700, 500)
         
         self.save_callback = save_callback
         self.current_settings = current_settings.copy()
+        
+        # Инициализация настроек инструментов
+        if "tools_settings" not in self.current_settings:
+            self.current_settings["tools_settings"] = {
+                "filesystem_enabled": True,
+                "websearch_enabled": DDGS_AVAILABLE,
+                "math_enabled": SYMPY_AVAILABLE,
+                "image_enabled": PIL_AVAILABLE,
+                "command_full_access": False,  # По умолчанию ограниченный доступ
+                "allowed_commands": ["ls", "dir", "cat", "head", "tail", "pwd", "echo", "find", "grep"],
+            }
         
         # Modal behavior
         self.transient(parent)
@@ -518,15 +541,35 @@ class SettingsDialog(ctk.CTkToplevel):
         self.geometry(f"+{x}+{y}")
     
     def _create_widgets(self):
-        """Create settings widgets."""
-        # Main frame
-        main_frame = ctk.CTkFrame(self, fg_color="transparent")
-        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        """Create settings widgets with tabs."""
+        # Создаем систему вкладок
+        self.tabview = ctk.CTkTabview(self, width=850, height=600)
+        self.tabview.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Вкладка 1: LM Studio
+        self.lmstudio_tab = self.tabview.add("LM Studio")
+        self._create_lmstudio_widgets(self.lmstudio_tab)
+        
+        # Вкладка 2: Инструменты
+        self.tools_tab = self.tabview.add("Инструменты")
+        self._create_tools_widgets(self.tools_tab)
+        
+        # Вкладка 3: Безопасность
+        self.security_tab = self.tabview.add("Безопасность")
+        self._create_security_widgets(self.security_tab)
+        
+        # Кнопки внизу
+        self._create_buttons()
+    
+    def _create_lmstudio_widgets(self, parent):
+        """Виджеты настроек LM Studio."""
+        main_frame = ctk.CTkScrollableFrame(parent, fg_color="transparent")
+        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
         
         # Title
         title = ctk.CTkLabel(
             main_frame,
-            text="LM Studio Settings",
+            text="Настройки LM Studio",
             font=ctk.CTkFont(size=20, weight="bold")
         )
         title.pack(pady=(0, 20))
@@ -556,14 +599,14 @@ class SettingsDialog(ctk.CTkToplevel):
         
         ctk.CTkLabel(
             model_frame,
-            text="Model Name (optional):",
+            text="Model Name (опционально):",
             font=ctk.CTkFont(size=13)
         ).pack(anchor="w")
         
         self.model_entry = ctk.CTkEntry(
             model_frame,
             width=400,
-            placeholder_text="Leave empty for default"
+            placeholder_text="Оставить пустым для значения по умолчанию"
         )
         self.model_entry.pack(fill="x", pady=5)
         if self.current_settings.get("model_name", ""):
@@ -575,7 +618,7 @@ class SettingsDialog(ctk.CTkToplevel):
         
         ctk.CTkLabel(
             temp_frame,
-            text="Temperature:",
+            text="Temperature (креативность):",
             font=ctk.CTkFont(size=13)
         ).pack(anchor="w")
         
@@ -602,7 +645,7 @@ class SettingsDialog(ctk.CTkToplevel):
         
         ctk.CTkLabel(
             workdir_frame,
-            text="Working Directory:",
+            text="Рабочая директория:",
             font=ctk.CTkFont(size=13)
         ).pack(anchor="w")
         
@@ -620,49 +663,235 @@ class SettingsDialog(ctk.CTkToplevel):
         
         browse_btn = ctk.CTkButton(
             workdir_entry_frame,
-            text="Browse...",
+            text="Обзор...",
             command=self._browse_workdir,
             width=80
         )
         browse_btn.pack(side="right", padx=(10, 0))
+    
+    def _create_tools_widgets(self, parent):
+        """Виджеты управления инструментами."""
+        main_frame = ctk.CTkScrollableFrame(parent, fg_color="transparent")
+        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
         
-        # Project folder
-        project_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-        project_frame.pack(fill="x", pady=10)
+        title = ctk.CTkLabel(
+            main_frame,
+            text="Управление инструментами",
+            font=ctk.CTkFont(size=20, weight="bold")
+        )
+        title.pack(pady=(0, 20))
+        
+        desc = ctk.CTkLabel(
+            main_frame,
+            text="Включайте/выключайте инструменты для контроля возможностей агента",
+            font=ctk.CTkFont(size=12),
+            text_color="#7f8c8d"
+        )
+        desc.pack(pady=(0, 20))
+        
+        tools = self.current_settings.get("tools_settings", {})
+        
+        # Файловая система
+        self._create_tool_toggle(
+            main_frame,
+            "📁 Файловая система",
+            "Чтение/запись файлов, просмотр директорий",
+            "filesystem_enabled",
+            tools.get("filesystem_enabled", True)
+        )
+        
+        # Веб-поиск
+        self._create_tool_toggle(
+            main_frame,
+            "🌐 Веб-поиск",
+            "Поиск информации в интернете через DuckDuckGo",
+            "websearch_enabled",
+            tools.get("websearch_enabled", DDGS_AVAILABLE),
+            disabled=not DDGS_AVAILABLE,
+            disabled_text="Требуется пакет duckduckgo-search"
+        )
+        
+        # Математика
+        self._create_tool_toggle(
+            main_frame,
+            "🧮 Математика",
+            "Вычисления и решение уравнений через SymPy",
+            "math_enabled",
+            tools.get("math_enabled", SYMPY_AVAILABLE),
+            disabled=not SYMPY_AVAILABLE,
+            disabled_text="Требуется пакет sympy"
+        )
+        
+        # Изображения
+        self._create_tool_toggle(
+            main_frame,
+            "🖼️ Обработка изображений",
+            "Получение информации об изображениях",
+            "image_enabled",
+            tools.get("image_enabled", PIL_AVAILABLE),
+            disabled=not PIL_AVAILABLE,
+            disabled_text="Требуется пакет Pillow"
+        )
+        
+        # Командная строка
+        self._create_tool_toggle(
+            main_frame,
+            "💻 Командная строка",
+            "Выполнение системных команд",
+            "command_line_enabled",
+            tools.get("command_line_enabled", True)
+        )
+    
+    def _create_tool_toggle(self, parent, title, description, setting_key, enabled, disabled=False, disabled_text=""):
+        """Создание переключателя инструмента."""
+        frame = ctk.CTkFrame(parent, fg_color="#2b2b2b")
+        frame.pack(fill="x", pady=5, padx=5)
+        
+        # Название и описание
+        info_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        info_frame.pack(side="left", fill="both", expand=True, padx=15, pady=10)
         
         ctk.CTkLabel(
-            project_frame,
-            text="Project Folder (optional):",
-            font=ctk.CTkFont(size=13)
+            info_frame,
+            text=title,
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color="#3498db" if enabled else "#7f8c8d"
         ).pack(anchor="w")
         
-        project_entry_frame = ctk.CTkFrame(project_frame, fg_color="transparent")
-        project_entry_frame.pack(fill="x", pady=5)
+        ctk.CTkLabel(
+            info_frame,
+            text=description,
+            font=ctk.CTkFont(size=11),
+            text_color="#7f8c8d"
+        ).pack(anchor="w")
         
-        self.project_entry = ctk.CTkEntry(
-            project_entry_frame,
-            width=320,
-            placeholder_text="Same as working directory"
+        if disabled and disabled_text:
+            ctk.CTkLabel(
+                info_frame,
+                text=f"⚠ {disabled_text}",
+                font=ctk.CTkFont(size=10),
+                text_color="#e74c3c"
+            ).pack(anchor="w", pady=(5, 0))
+        
+        # Переключатель
+        switch_var = ctk.BooleanVar(value=enabled and not disabled)
+        setattr(self, f"_{setting_key}_var", switch_var)
+        
+        switch = ctk.CTkSwitch(
+            frame,
+            variable=switch_var,
+            text="Вкл" if enabled else "Выкл",
+            command=lambda s=switch, t=title: s.configure(text="Вкл" if s.get() else "Выкл"),
+            state="disabled" if disabled else "normal"
         )
-        self.project_entry.pack(side="left", fill="x", expand=True)
-        if self.current_settings.get("project_folder", ""):
-            self.project_entry.insert(0, self.current_settings.get("project_folder", ""))
+        switch.pack(side="right", padx=15, pady=10)
+    
+    def _create_security_widgets(self, parent):
+        """Виджеты настроек безопасности."""
+        main_frame = ctk.CTkScrollableFrame(parent, fg_color="transparent")
+        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
         
-        browse_project_btn = ctk.CTkButton(
-            project_entry_frame,
-            text="Browse...",
-            command=self._browse_project,
-            width=80
+        title = ctk.CTkLabel(
+            main_frame,
+            text="Настройки безопасности",
+            font=ctk.CTkFont(size=20, weight="bold")
         )
-        browse_project_btn.pack(side="right", padx=(10, 0))
+        title.pack(pady=(0, 20))
         
-        # Buttons
-        button_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-        button_frame.pack(fill="x", pady=(30, 0))
+        warning = ctk.CTkLabel(
+            main_frame,
+            text="⚠ ВНИМАНИЕ: Полные права могут быть опасны!\nУбедитесь, что доверяете используемой модели.",
+            font=ctk.CTkFont(size=12),
+            text_color="#e74c3c",
+            justify="left"
+        )
+        warning.pack(pady=(0, 20), anchor="w")
+        
+        tools = self.current_settings.get("tools_settings", {})
+        
+        # Полный доступ к командной строке
+        security_frame = ctk.CTkFrame(main_frame, fg_color="#2b2b2b")
+        security_frame.pack(fill="x", pady=10, padx=5)
+        
+        ctk.CTkLabel(
+            security_frame,
+            text="💻 Полный доступ к командной строке",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color="#e74c3c"
+        ).pack(anchor="w", padx=15, pady=(10, 5))
+        
+        ctk.CTkLabel(
+            security_frame,
+            text="Разрешить выполнение ЛЮБЫХ команд (включая rm, del, format и т.д.)",
+            font=ctk.CTkFont(size=11),
+            text_color="#7f8c8d"
+        ).pack(anchor="w", padx=15, pady=(0, 10))
+        
+        self.full_access_var = ctk.BooleanVar(value=tools.get("command_full_access", False))
+        self.full_access_switch = ctk.CTkSwitch(
+            security_frame,
+            variable=self.full_access_var,
+            text="Полный доступ" if self.full_access_var.get() else "Ограниченный доступ",
+            command=self._toggle_full_access
+        )
+        self.full_access_switch.pack(side="right", padx=15, pady=10)
+        
+        # Список разрешённых команд (для ограниченного режима)
+        self.allowed_commands_frame = ctk.CTkFrame(main_frame, fg_color="#2b2b2b")
+        self.allowed_commands_frame.pack(fill="both", expand=True, pady=10, padx=5)
+        
+        ctk.CTkLabel(
+            self.allowed_commands_frame,
+            text="Разрешённые команды (ограниченный режим):",
+            font=ctk.CTkFont(size=13, weight="bold")
+        ).pack(anchor="w", padx=15, pady=(10, 5))
+        
+        ctk.CTkLabel(
+            self.allowed_commands_frame,
+            text="Введите команды через запятую (например: ls, dir, cat, pwd)",
+            font=ctk.CTkFont(size=10),
+            text_color="#7f8c8d"
+        ).pack(anchor="w", padx=15, pady=(0, 5))
+        
+        allowed_commands = tools.get("allowed_commands", ["ls", "dir", "cat", "head", "tail", "pwd", "echo", "find", "grep"])
+        self.allowed_commands_entry = ctk.CTkTextbox(
+            self.allowed_commands_frame,
+            height=100,
+            font=ctk.CTkFont(size=12),
+            wrap="word"
+        )
+        self.allowed_commands_entry.pack(fill="both", expand=True, padx=15, pady=5)
+        self.allowed_commands_entry.insert("0.0", ", ".join(allowed_commands))
+        
+        # Обновить состояние UI
+        self._update_security_ui()
+    
+    def _toggle_full_access(self):
+        """Переключение полного доступа."""
+        is_full = self.full_access_var.get()
+        self.full_access_switch.configure(
+            text="Полный доступ ⚠" if is_full else "Ограниченный доступ"
+        )
+        self._update_security_ui()
+    
+    def _update_security_ui(self):
+        """Обновление состояния UI безопасности."""
+        is_full = self.full_access_var.get()
+        
+        # Блокируем список команд при полном доступе
+        if is_full:
+            self.allowed_commands_entry.configure(state="disabled", fg_color="#1a1a1a")
+        else:
+            self.allowed_commands_entry.configure(state="normal", fg_color="#2b2b2b")
+    
+    def _create_buttons(self):
+        """Кнопки сохранения/отмены."""
+        button_frame = ctk.CTkFrame(self, fg_color="transparent")
+        button_frame.pack(fill="x", padx=20, pady=(0, 20))
         
         cancel_btn = ctk.CTkButton(
             button_frame,
-            text="Cancel",
+            text="Отмена",
             command=self.destroy,
             width=100
         )
@@ -670,9 +899,10 @@ class SettingsDialog(ctk.CTkToplevel):
         
         save_btn = ctk.CTkButton(
             button_frame,
-            text="Save",
+            text="Сохранить",
             command=self._save_settings,
-            width=100
+            width=100,
+            fg_color="#27ae60"
         )
         save_btn.pack(side="right", padx=10)
     
@@ -682,8 +912,24 @@ class SettingsDialog(ctk.CTkToplevel):
         self.current_settings["model_name"] = self.model_entry.get() or None
         self.current_settings["temperature"] = self.temp_slider.get()
         self.current_settings["working_dir"] = self.workdir_entry.get() or str(Path.cwd())
-        self.current_settings["project_folder"] = self.project_entry.get() or ""
         
+        # Сохранение настроек инструментов
+        tools_settings = {
+            "filesystem_enabled": getattr(self, "_filesystem_enabled_var", ctk.BooleanVar(value=True)).get(),
+            "websearch_enabled": getattr(self, "_websearch_enabled_var", ctk.BooleanVar(value=False)).get(),
+            "math_enabled": getattr(self, "_math_enabled_var", ctk.BooleanVar(value=False)).get(),
+            "image_enabled": getattr(self, "_image_enabled_var", ctk.BooleanVar(value=False)).get(),
+            "command_line_enabled": getattr(self, "_command_line_enabled_var", ctk.BooleanVar(value=True)).get(),
+            "command_full_access": self.full_access_var.get(),
+            "allowed_commands": [
+                cmd.strip() 
+                for cmd in self.allowed_commands_entry.get("0.0", "end-1c").split(",") 
+                if cmd.strip()
+            ],
+        }
+        self.current_settings["tools_settings"] = tools_settings
+        
+        logger.info(f"Settings saved: tools={tools_settings}")
         self.save_callback(self.current_settings)
         self.destroy()
     
@@ -1056,7 +1302,13 @@ class DeepAgentsGUI(ctk.CTk):
         """Save settings and reconnect."""
         self.settings = new_settings
         self.lmstudio_client = LMStudioClient(self.settings["lmstudio_url"])
+        
+        # Log tool settings
+        tools_settings = self.settings.get("tools_settings", {})
+        logger.info(f"Settings updated: tools={tools_settings}")
+        
         self._check_lmstudio_connection()
+        self._update_status("Настройки сохранены")
     
     def _new_task(self):
         """Create a new task/conversation."""
@@ -1120,6 +1372,64 @@ class DeepAgentsGUI(ctk.CTk):
         thread.daemon = True
         thread.start()
     
+    def _get_configured_tools(self):
+        """Get tools based on current settings."""
+        tools_settings = self.settings.get("tools_settings", {})
+        tools = []
+        
+        # Get security settings
+        full_access = tools_settings.get("command_full_access", False)
+        allowed_commands = tools_settings.get("allowed_commands", ["ls", "dir", "cat", "head", "tail", "pwd", "echo", "find", "grep"])
+        
+        # Файловая система
+        if tools_settings.get("filesystem_enabled", True):
+            tools.extend([
+                SimpleFilesystemTools.read_file,
+                SimpleFilesystemTools.write_file,
+                SimpleFilesystemTools.list_directory,
+            ])
+            logger.debug("Added filesystem tools")
+        
+        # Командная строка (всегда добавляем, но с проверкой прав внутри)
+        if tools_settings.get("command_line_enabled", True):
+            # Создаём обёртку для передачи настроек безопасности
+            from functools import partial
+            execute_cmd = partial(
+                SimpleFilesystemTools.execute_command,
+                full_access=full_access,
+                allowed_commands=allowed_commands
+            )
+            # Копируем метаданные оригинального инструмента
+            execute_cmd.name = SimpleFilesystemTools.execute_command.name
+            execute_cmd.description = SimpleFilesystemTools.execute_command.description
+            execute_cmd.args_schema = SimpleFilesystemTools.execute_command.args_schema
+            tools.append(execute_cmd)
+            logger.debug(f"Added command tool (full_access={full_access})")
+        
+        # Веб-поиск
+        if tools_settings.get("websearch_enabled", DDGS_AVAILABLE) and DDGS_AVAILABLE:
+            tools.extend([
+                WebSearchTools.web_search,
+                WebSearchTools.news_search,
+            ])
+            logger.debug("Added web search tools")
+        
+        # Математика
+        if tools_settings.get("math_enabled", SYMPY_AVAILABLE) and SYMPY_AVAILABLE:
+            tools.extend([
+                MathTools.calculate,
+                MathTools.solve_equation,
+            ])
+            logger.debug("Added math tools")
+        
+        # Изображения
+        if tools_settings.get("image_enabled", PIL_AVAILABLE) and PIL_AVAILABLE:
+            tools.append(ImageTools.get_image_info)
+            logger.debug("Added image tools")
+        
+        logger.info(f"Total tools configured: {len(tools)}")
+        return tools
+    
     def _process_message(self, message: str):
         """Process message in background thread."""
         try:
@@ -1139,34 +1449,8 @@ class DeepAgentsGUI(ctk.CTk):
                 self.settings["temperature"]
             )
             
-            # Get all available tools
-            tools = [
-                SimpleFilesystemTools.read_file,
-                SimpleFilesystemTools.write_file,
-                SimpleFilesystemTools.list_directory,
-                SimpleFilesystemTools.execute_command,
-            ]
-            
-            # Add web search tools if available
-            if DDGS_AVAILABLE:
-                tools.extend([
-                    WebSearchTools.web_search,
-                    WebSearchTools.news_search,
-                ])
-                logger.debug("Added web search tools")
-            
-            # Add math tools if available
-            if SYMPY_AVAILABLE:
-                tools.extend([
-                    MathTools.calculate,
-                    MathTools.solve_equation,
-                ])
-                logger.debug("Added math tools")
-            
-            # Add image tools if available
-            if PIL_AVAILABLE:
-                tools.append(ImageTools.get_image_info)
-                logger.debug("Added image tools")
+            # Get tools based on current settings
+            tools = self._get_configured_tools()
             
             logger.info(f"Total tools available: {len(tools)}")
             tool_names = [t.name for t in tools]
