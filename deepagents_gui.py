@@ -37,12 +37,13 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from langchain_core.tools import BaseTool, tool
 import httpx
 
-# Import improved message bubble module
-from message_bubble import MessageBubble, calculate_text_height
-
 # Import modular components
 from core.utils import LMStudioClient
 from core.tools import SimpleFilesystemTools, get_execute_command_tool, WebSearchTools, MathTools
+from core.gui import ChatWindow, MessageBubble
+
+# Note: Old message_bubble.py module replaced by core.gui package
+# from message_bubble import MessageBubble, calculate_text_height  # DEPRECATED
 
 # Configure logging
 logging.basicConfig(
@@ -845,14 +846,14 @@ class DeepAgentsGUI(ctk.CTk):
         chat_container.grid_columnconfigure(0, weight=1)
         chat_container.grid_rowconfigure(0, weight=1)
         
-        # Scrollable chat frame
-        self.chat_canvas = ctk.CTkScrollableFrame(
+        # Scrollable chat frame using new ChatWindow component
+        self.chat_canvas = ChatWindow(
             chat_container,
+            on_copy=self._copy_to_clipboard,
+            max_messages=200,
             fg_color="transparent"
         )
         self.chat_canvas.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
-        # Don't configure column weight to prevent horizontal stretching of messages
-        # self.chat_canvas.grid_columnconfigure(0, weight=1)
         
         # Welcome message
         self._add_welcome_message()
@@ -936,13 +937,8 @@ class DeepAgentsGUI(ctk.CTk):
         
         logger.info(f"Displaying welcome message, tools available: {tools_available}")
         
-        bubble = MessageBubble(
-            self.chat_canvas,
-            message=welcome_text,
-            role="assistant",
-            fg_color="transparent"
-        )
-        bubble.grid(row=len(self.conversation_history), column=0, sticky="ew", pady=5, padx=10)
+        # Use new ChatWindow method
+        self.chat_canvas.add_message(welcome_text, is_user=False)
     
     def _add_message_bubble(self, message: str, role: str = "user") -> MessageBubble:
         """Add a message bubble to the chat."""
@@ -1157,8 +1153,8 @@ class DeepAgentsGUI(ctk.CTk):
         if not message:
             return
         
-        # Add user message to UI
-        self._add_message_bubble(message, role="user")
+        # Add user message to UI using new ChatWindow
+        self.chat_canvas.add_message(message, is_user=True)
         self.conversation_history.append(HumanMessage(content=message))
         
         # Clear input
@@ -1314,12 +1310,8 @@ class DeepAgentsGUI(ctk.CTk):
     
     def _display_assistant_response(self, content: str):
         """Display assistant response in chat."""
-        # Always create a new bubble for assistant response to avoid overwriting
-        bubble = self._add_message_bubble(content, role="assistant")
-        self.last_assistant_bubble = bubble
-        
-        # Store reference for potential updates
-        self.current_bubble = self.last_assistant_bubble
+        # Use new ChatWindow method
+        self.chat_canvas.add_message(content, is_user=False)
 
 
 def main():
