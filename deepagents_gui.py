@@ -270,6 +270,43 @@ class SimpleFilesystemTools:
             return f"Error executing command: {str(e)}"
 
 
+def get_execute_command_tool(full_access: bool = False, allowed_commands: list = None):
+    """Create a configured execute_command tool with security settings.
+    
+    This function creates a partial application of SimpleFilesystemTools.execute_command
+    with the specified security settings.
+    
+    Args:
+        full_access: If True, allow any command (dangerous!).
+        allowed_commands: List of allowed command prefixes.
+        
+    Returns:
+        A configured tool function for executing commands.
+    """
+    from functools import partial
+    
+    if allowed_commands is None:
+        allowed_commands = ["ls", "dir", "cat", "head", "tail", "pwd", "echo", "find", "grep"]
+    
+    # Get the underlying function from the staticmethod descriptor
+    base_func = SimpleFilesystemTools.__dict__['execute_command']
+    if isinstance(base_func, staticmethod):
+        base_func = base_func.__func__
+    
+    # Create partial application with security settings
+    execute_cmd = partial(base_func, full_access=full_access, allowed_commands=allowed_commands)
+    
+    # Copy metadata from the original tool
+    if hasattr(SimpleFilesystemTools.execute_command, 'name'):
+        execute_cmd.name = SimpleFilesystemTools.execute_command.name
+    if hasattr(SimpleFilesystemTools.execute_command, 'description'):
+        execute_cmd.description = SimpleFilesystemTools.execute_command.description
+    if hasattr(SimpleFilesystemTools.execute_command, 'args_schema'):
+        execute_cmd.args_schema = SimpleFilesystemTools.execute_command.args_schema
+    
+    return execute_cmd
+
+
 class WebSearchTools:
     """Web search tools using DuckDuckGo."""
     
@@ -1133,6 +1170,7 @@ class DeepAgentsGUI(ctk.CTk):
         self.conversation_history: list = []
         self.is_processing = False
         self.current_tool_calls: list = []
+        self.current_tool_names: list = []  # Store available tool names for display
         self.tasks: list = []  # List of tasks/conversations
         
         # Setup UI
@@ -1338,6 +1376,8 @@ class DeepAgentsGUI(ctk.CTk):
     def _add_welcome_message(self):
         """Add welcome message to chat."""
         tools_available = []
+        tools_available.append("File operations")  # Always available
+        tools_available.append("Command execution")  # Always available
         if DDGS_AVAILABLE:
             tools_available.extend(["Web search", "News search"])
         if SYMPY_AVAILABLE:
@@ -1348,17 +1388,13 @@ class DeepAgentsGUI(ctk.CTk):
         welcome_text = (
             f"Welcome to DeepAgents GUI! 🎉\n\n"
             f"I'm connected to LM Studio and ready to help you with various tasks.\n\n"
-            f"I can:\n"
-            f"• Answer questions using local models\n"
-            f"• Read and write files\n"
-            f"• List directory contents\n"
-            f"• Execute safe shell commands\n"
+            f"Available tools:\n"
         )
         
-        if tools_available:
-            welcome_text += f"• {', '.join(tools_available)}\n"
+        for tool in tools_available:
+            welcome_text += f"• {tool}\n"
         
-        welcome_text += "\nTo get started, simply type your message below!"
+        welcome_text += "\nConfigure tools in Settings > Tools tab\nTo get started, simply type your message below!"
         
         logger.info(f"Displaying welcome message, tools available: {tools_available}")
         
@@ -1615,17 +1651,11 @@ class DeepAgentsGUI(ctk.CTk):
         
         # Командная строка (всегда добавляем, но с проверкой прав внутри)
         if tools_settings.get("command_line_enabled", True):
-            # Создаём обёртку для передачи настроек безопасности
-            from functools import partial
-            execute_cmd = partial(
-                SimpleFilesystemTools.execute_command,
+            # Используем вспомогательную функцию для создания инструмента с настройками безопасности
+            execute_cmd = get_execute_command_tool(
                 full_access=full_access,
                 allowed_commands=allowed_commands
             )
-            # Копируем метаданные оригинального инструмента
-            execute_cmd.name = SimpleFilesystemTools.execute_command.name
-            execute_cmd.description = SimpleFilesystemTools.execute_command.description
-            execute_cmd.args_schema = SimpleFilesystemTools.execute_command.args_schema
             tools.append(execute_cmd)
             logger.debug(f"Added command tool (full_access={full_access})")
         
@@ -1679,6 +1709,9 @@ class DeepAgentsGUI(ctk.CTk):
             tool_names = [t.name for t in tools]
             logger.debug(f"Tool names: {tool_names}")
             
+            # Store tool names for display during agent execution
+            self.current_tool_names = tool_names
+            
             # Create agent - use deepagents if available, otherwise basic LangGraph
             if DEEPAGENTS_AVAILABLE:
                 # Use full DeepAgents with all features
@@ -1702,9 +1735,13 @@ class DeepAgentsGUI(ctk.CTk):
                 from langgraph.prebuilt import create_react_agent
                 agent = create_react_agent(model, tools)
             
-            # Run agent
+            # Run agent with tool call tracking
             config = {"recursion_limit": 100}
             logger.info("Invoking agent...")
+            
+            # Track tool usage for display
+            self.after(0, lambda: self._update_status(f"Processing... Tools: {', '.join(self.current_tool_names[:3])}..."))
+            
             response = agent.invoke(
                 {"messages": self.conversation_history},
                 config=config
