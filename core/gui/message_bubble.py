@@ -146,7 +146,7 @@ class MessageBubble(ctk.CTkFrame):
         self._padding_y = 10
         
         # Настройка grid для растягивания
-        self.grid_columnconfigure(0, weight=0 if not is_user else 1)
+        self.grid_columnconfigure(0, weight=1)  # Растягиваем на всю ширину
         self.grid_rowconfigure(0, weight=1)
         
         # Создание текстового виджета
