@@ -849,7 +849,6 @@ class DeepAgentsGUI(ctk.CTk):
         # Scrollable chat frame using new ChatWindow component
         self.chat_canvas = ChatWindow(
             chat_container,
-            on_copy=self._copy_to_clipboard,
             max_messages=200,
             fg_color="transparent"
         )
@@ -942,27 +941,14 @@ class DeepAgentsGUI(ctk.CTk):
     
     def _add_message_bubble(self, message: str, role: str = "user") -> MessageBubble:
         """Add a message bubble to the chat."""
-        row = len(self.conversation_history)
+        logger.debug(f"Adding {role} message bubble, message length: {len(message)}")
         
-        logger.debug(f"Adding {role} message bubble at row {row}, message length: {len(message)}")
+        # Use new ChatWindow method instead of direct MessageBubble creation
+        is_user = (role == "user")
+        self.chat_canvas.add_message(message, is_user=is_user)
         
-        bubble = MessageBubble(
-            self.chat_canvas,
-            message=message,
-            role=role,
-            fg_color="transparent"
-        )
-        # Use sticky="ew" for full-width messages
-        # The new MessageBubble class handles proper sizing internally
-        bubble.grid(row=row, column=0, sticky="ew", pady=5, padx=10)
-        
-        # Force layout update to ensure proper sizing
-        self.chat_canvas.update_idletasks()
-        
-        # Auto-scroll to bottom
-        self.chat_canvas._scrollbar.set(1.0, 1.0)
-        
-        return bubble
+        # Return None or last bubble if needed
+        return self.chat_canvas._bubbles[-1] if self.chat_canvas._bubbles else None
     
     def _update_status(self, status: str):
         """Update status bar text."""
