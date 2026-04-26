@@ -39,7 +39,7 @@ import httpx
 
 # Import modular components
 from core.utils import LMStudioClient
-from core.tools import SimpleFilesystemTools, get_execute_command_tool, WebSearchTools, MathTools
+from core.tools import SimpleFilesystemTools, get_execute_command_tool, WebSearchTools, MathTools, get_python_tools
 from core.gui import ChatWindow, MessageBubble, ProcessWindow, ToolExecutionPanel
 
 # Note: Old message_bubble.py module replaced by core.gui package
@@ -172,6 +172,7 @@ class SettingsDialog(ctk.CTkToplevel):
                 "filesystem_enabled": True,
                 "websearch_enabled": DDGS_AVAILABLE,
                 "math_enabled": SYMPY_AVAILABLE,
+                "python_enabled": True,
                 "image_enabled": PIL_AVAILABLE,
                 "command_full_access": False,  # По умолчанию ограниченный доступ
                 "allowed_commands": ["ls", "dir", "cat", "head", "tail", "pwd", "echo", "find", "grep"],
@@ -428,6 +429,15 @@ class SettingsDialog(ctk.CTkToplevel):
             disabled_text="Требуется пакет sympy"
         )
         
+        # Python инструменты
+        self._create_tool_toggle(
+            main_frame,
+            "🐍 Python инструменты",
+            "Установка pip, выполнение скриптов, проверка синтаксиса, форматирование",
+            "python_enabled",
+            tools.get("python_enabled", True)
+        )
+        
         # Изображения
         self._create_tool_toggle(
             main_frame,
@@ -645,6 +655,7 @@ class SettingsDialog(ctk.CTkToplevel):
             "filesystem_enabled": getattr(self, "_filesystem_enabled_var", ctk.BooleanVar(value=True)).get(),
             "websearch_enabled": getattr(self, "_websearch_enabled_var", ctk.BooleanVar(value=False)).get(),
             "math_enabled": getattr(self, "_math_enabled_var", ctk.BooleanVar(value=False)).get(),
+            "python_enabled": getattr(self, "_python_enabled_var", ctk.BooleanVar(value=True)).get(),
             "image_enabled": getattr(self, "_image_enabled_var", ctk.BooleanVar(value=False)).get(),
             "command_line_enabled": getattr(self, "_command_line_enabled_var", ctk.BooleanVar(value=True)).get(),
             "command_full_access": self.full_access_var.get(),
@@ -1218,6 +1229,12 @@ class DeepAgentsGUI(ctk.CTk):
                 MathTools.solve_equation,
             ])
             logger.debug("Added math tools")
+        
+        # Python инструменты
+        if tools_settings.get("python_enabled", True):
+            python_tools = get_python_tools()
+            tools.extend(python_tools)
+            logger.debug(f"Added {len(python_tools)} Python tools")
         
         # Изображения
         if tools_settings.get("image_enabled", PIL_AVAILABLE) and PIL_AVAILABLE:
