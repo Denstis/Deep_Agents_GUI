@@ -94,12 +94,21 @@ class MessageBubble(ctk.CTkFrame):
     
     def _setup_tags(self):
         """Настройка тегов для подсветки кода."""
-        text_widget = self._text_widget.winfo_toplevel().nametowidget(
-            self._text_widget._w
-        ) if hasattr(self._text_widget, '_w') else self._text_widget
+        # Получаем доступ к внутреннему tk.Text виджету внутри CTkTextbox
+        internal_text = self._text_widget.textbox if hasattr(self._text_widget, 'textbox') else None
+        
+        if internal_text is None:
+            # Fallback: пытаемся найти по имени
+            for widget in self._text_widget.winfo_children():
+                if isinstance(widget, tk.Text):
+                    internal_text = widget
+                    break
+        
+        if internal_text is None:
+            return  # Не удалось получить доступ к текстовому виджету
         
         # Тег для блоков кода
-        self._text_widget.tag_configure(
+        internal_text.tag_configure(
             'code',
             font=('Consolas', 11),
             background='#1e1e1e',
@@ -112,11 +121,24 @@ class MessageBubble(ctk.CTkFrame):
         )
         
         # Тег для обычного текста
-        self._text_widget.tag_configure(
+        internal_text.tag_configure(
             'normal',
             font=('Arial', 12),
             foreground='#ffffff'
         )
+    
+    def _get_internal_text(self):
+        """Получить доступ к внутреннему tk.Text виджету."""
+        # В customtkinter внутренний виджет называется _textbox
+        if hasattr(self._text_widget, '_textbox'):
+            return self._text_widget._textbox
+        
+        # Fallback: ищем среди дочерних виджетов
+        for widget in self._text_widget.winfo_children():
+            if isinstance(widget, tk.Text):
+                return widget
+        
+        return None
     
     def _insert_formatted_text(self, text: str):
         """
@@ -124,8 +146,12 @@ class MessageBubble(ctk.CTkFrame):
         
         Блоки кода определяются по ``` и выделяются отдельным тегом.
         """
-        self._text_widget.configure(state='normal')
-        self._text_widget.delete('1.0', tk.END)
+        internal_text = self._get_internal_text()
+        if internal_text is None:
+            return
+        
+        internal_text.configure(state='normal')
+        internal_text.delete('1.0', tk.END)
         
         # Разделение текста на блоки кода и обычный текст
         parts = re.split(r'(```[\s\S]*?```)', text)
@@ -138,12 +164,12 @@ class MessageBubble(ctk.CTkFrame):
                 if '\n' in code_content:
                     lang, code = code_content.split('\n', 1)
                     code_content = code
-                self._text_widget.insert(tk.END, code_content + '\n', 'code')
+                internal_text.insert(tk.END, code_content + '\n', 'code')
             else:
                 # Обычный текст
-                self._text_widget.insert(tk.END, part, 'normal')
+                internal_text.insert(tk.END, part, 'normal')
         
-        self._text_widget.configure(state='disabled' if not self.is_user else 'normal')
+        internal_text.configure(state='disabled' if not self.is_user else 'normal')
     
     def _bind_copy_event(self):
         """Привязка события двойного клика для копирования."""
@@ -162,13 +188,17 @@ class MessageBubble(ctk.CTkFrame):
             text: Новый текст или добавляемый фрагмент
             append: Если True, текст добавляется в конец
         """
+        internal_text = self._get_internal_text()
+        if internal_text is None:
+            return
+        
         if append:
             self.text += text
-            self._text_widget.configure(state='normal')
+            internal_text.configure(state='normal')
             # Добавляем текст без тега для производительности (стриминг)
-            self._text_widget.insert(tk.END, text)
-            self._text_widget.see(tk.END)  # Автоскролл к концу
-            self._text_widget.configure(state='disabled' if not self.is_user else 'normal')
+            internal_text.insert(tk.END, text)
+            internal_text.see(tk.END)  # Автоскролл к концу
+            internal_text.configure(state='disabled' if not self.is_user else 'normal')
         else:
             self.text = text
             self._insert_formatted_text(text)
