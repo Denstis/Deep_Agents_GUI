@@ -1,1 +1,1 @@
-Nothing needs to be added to the .gitignore file based on the provided file changes. The modified files (`1_install.bat` and `run.bat`) are batch script files that should typically be tracked in version control.
+Nothing needs to be added to .gitignore since the only modified file is `1_install.bat`, which is a batch script file and not a build artifact, dependency, or temporary file.
