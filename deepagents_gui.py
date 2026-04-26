@@ -288,10 +288,9 @@ def get_execute_command_tool(full_access: bool = False, allowed_commands: list =
     if allowed_commands is None:
         allowed_commands = ["ls", "dir", "cat", "head", "tail", "pwd", "echo", "find", "grep"]
     
-    # Get the underlying function from the staticmethod descriptor
-    base_func = SimpleFilesystemTools.__dict__['execute_command']
-    if isinstance(base_func, staticmethod):
-        base_func = base_func.__func__
+    # Get the underlying function from the tool descriptor
+    # The @tool decorator creates a StructuredTool with the original function in .func
+    base_func = SimpleFilesystemTools.execute_command.func
     
     # Create partial application with security settings
     execute_cmd = partial(base_func, full_access=full_access, allowed_commands=allowed_commands)
