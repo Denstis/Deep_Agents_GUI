@@ -40,7 +40,7 @@ import httpx
 # Import modular components
 from core.utils import LMStudioClient
 from core.tools import SimpleFilesystemTools, get_execute_command_tool, WebSearchTools, MathTools
-from core.gui import ChatWindow, MessageBubble
+from core.gui import ChatWindow, MessageBubble, ProcessWindow
 
 # Note: Old message_bubble.py module replaced by core.gui package
 # from message_bubble import MessageBubble, calculate_text_height  # DEPRECATED
@@ -718,6 +718,7 @@ class DeepAgentsGUI(ctk.CTk):
         self.current_tool_names: list = []  # Store available tool names for display
         self.tasks: list = []  # List of tasks/conversations
         self.last_assistant_bubble = None  # Track last assistant bubble for updates
+        self.process_window = None  # Process monitoring window
         
         # Setup UI
         self._setup_ui()
@@ -898,50 +899,18 @@ class DeepAgentsGUI(ctk.CTk):
         self.input_text.bind("<Control-Return>", lambda e: self._send_message())
         
         # === Правая часть: Панель процесса работы (мышления) ===
+        # Используем ProcessWindow для отображения процесса выполнения
+        self.process_window = ProcessWindow(main_frame, fg_color="#252525")
+        self.process_window.grid(row=0, column=1, sticky="nsew", padx=(5, 0), pady=0)
+        
+        # Старая панель мышления остаётся для обратной совместимости (скрыта по умолчанию)
         self.thinking_panel = ctk.CTkFrame(main_frame, fg_color="#252525", width=300)
-        self.thinking_panel.grid(row=0, column=1, sticky="nsew", padx=(5, 0), pady=0)
-        self.thinking_panel.grid_columnconfigure(0, weight=1)
-        self.thinking_panel.grid_rowconfigure(1, weight=1)
-        
-        # Заголовок панели
-        thinking_header = ctk.CTkLabel(
-            self.thinking_panel,
-            text="🧠 Процесс работы",
-            font=ctk.CTkFont(size=14, weight="bold"),
-            text_color="#3498db"
-        )
-        thinking_header.grid(row=0, column=0, sticky="ew", padx=10, pady=10)
-        
-        # Прокручиваемая область для лога процесса
-        self.thinking_log = ctk.CTkTextbox(
-            self.thinking_panel,
-            font=ctk.CTkFont(size=11, family='Consolas'),
-            wrap="word",
-            state="disabled",
-            fg_color="#1a1a1a",
-            text_color="#aaaaaa"
-        )
-        self.thinking_log.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
-        
-        # Счётчик шагов/токенов
-        self.thinking_stats = ctk.CTkLabel(
-            self.thinking_panel,
-            text="Ожидание запроса...",
-            font=ctk.CTkFont(size=10),
-            text_color="#7f8c8d"
-        )
-        self.thinking_stats.grid(row=2, column=0, sticky="ew", padx=10, pady=5)
-        
-        # Инициализация лога процесса
-        self.thinking_steps = []
+        # thinking_panel больше не добавляется в grid, используется process_window
     
     def _clear_thinking_log(self):
         """Очистка лога процесса работы."""
-        self.thinking_steps.clear()
-        self.thinking_log.configure(state='normal')
-        self.thinking_log.delete('1.0', 'end')
-        self.thinking_log.configure(state='disabled')
-        self.thinking_stats.configure(text="Ожидание запроса...")
+        if self.process_window:
+            self.process_window.clear()
     
     def _log_thinking_step(self, step_text: str):
         """
@@ -950,23 +919,8 @@ class DeepAgentsGUI(ctk.CTk):
         Args:
             step_text: Текст шага (например, "🚀 Начало обработки запроса")
         """
-        import datetime
-        
-        # Добавляем временную метку
-        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
-        log_entry = f"[{timestamp}] {step_text}\n"
-        
-        # Сохраняем в историю
-        self.thinking_steps.append(log_entry.strip())
-        
-        # Обновляем UI в главном потоке
-        self.thinking_log.configure(state='normal')
-        self.thinking_log.insert('end', log_entry)
-        self.thinking_log.see('end')  # Автоскролл к концу
-        self.thinking_log.configure(state='disabled')
-        
-        # Обновляем статистику
-        self.thinking_stats.configure(text=f"Шагов: {len(self.thinking_steps)}")
+        if self.process_window:
+            self.process_window.add_message(step_text)
     
     def _create_status_bar(self):
         """Create status bar at bottom."""
@@ -1201,6 +1155,10 @@ class DeepAgentsGUI(ctk.CTk):
         for widget in self.chat_canvas.winfo_children():
             widget.destroy()
         
+        # Clear process window
+        if self.process_window:
+            self.process_window.clear()
+        
         self._add_welcome_message()
         self._update_status("Chat cleared")
     
@@ -1408,6 +1366,9 @@ class DeepAgentsGUI(ctk.CTk):
                                     tool_name = tc.get('name', 'unknown') if isinstance(tc, dict) else getattr(tc, 'name', 'unknown')
                                     tool_args = tc.get('arguments', {}) if isinstance(tc, dict) else getattr(tc, 'args', {})
                                     self.after(0, lambda tn=tool_name, ta=tool_args: self._log_thinking_step(f"🔧 Вызов инструмента: {tn}({ta})"))
+                                    # Добавляем вызов инструмента в ProcessWindow
+                                    if self.process_window:
+                                        self.process_window.add_tool_call(tool_name, tool_args)
                                     task_logger.info(f"🔧 ВЫЗОВ ИНСТРУМЕНТА: {tool_name} с аргументами: {json.dumps(tool_args, ensure_ascii=False)}")
                             elif hasattr(msg, 'content') and msg.content:
                                 content_full = str(msg.content)
@@ -1422,6 +1383,15 @@ class DeepAgentsGUI(ctk.CTk):
                                 if len(result_full) > 60:
                                     result_preview += "..."
                                 self.after(0, lambda rp=result_preview: self._log_thinking_step(f"✅ Результат: {rp}"))
+                                # Обновляем статус последнего вызова инструмента в ProcessWindow
+                                if self.process_window and result_preview:
+                                    # Находим последний вызов инструмента и обновляем его
+                                    tool_calls = self.process_window.tools_panel.tool_calls
+                                    if tool_calls:
+                                        last_call = tool_calls[-1]
+                                        call_id = last_call.get('id', '')
+                                        status = 'error' if 'Error' in result_full or 'error' in result_full else 'completed'
+                                        self.process_window.update_tool_call(call_id, status, result_preview)
                                 task_logger.info(f"✅ РЕЗУЛЬТАТ ИНСТРУМЕНТА: {result_full}")
             except Exception as e:
                 logger.error(f"Stream error: {e}")
