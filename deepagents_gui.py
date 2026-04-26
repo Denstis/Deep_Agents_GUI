@@ -447,7 +447,7 @@ class ImageTools:
 
 
 class MessageBubble(ctk.CTkFrame):
-    """A message bubble widget for chat display."""
+    """A message bubble widget for chat display with collapsible content."""
     
     def __init__(
         self,
@@ -460,6 +460,9 @@ class MessageBubble(ctk.CTkFrame):
         super().__init__(master, **kwargs)
         
         self.role = role
+        self.is_expanded = False
+        self.full_message = message
+        self.collapsed_lines = 15  # Количество видимых строк в свернутом режиме
         self.configure(corner_radius=10, fg_color="transparent")
         logger.debug(f"MessageBubble created: role={role}, message_len={len(message)}")
         
@@ -480,27 +483,57 @@ class MessageBubble(ctk.CTkFrame):
         )
         self.role_label.pack(fill="x", padx=5, pady=(5, 0))
         
-        # Message content
+        # Message content frame
         self.message_frame = ctk.CTkFrame(
             self,
             corner_radius=10,
             fg_color="#2b2b2b" if role == "assistant" else "#3a3a3a"
         )
-        self.message_frame.pack(fill="x", expand=True, padx=5, pady=5)
+        self.message_frame.pack(fill="both", expand=True, padx=5, pady=5)
         
-        self.message_label = ctk.CTkLabel(
+        # Text widget with scrollbar for long messages
+        self.message_text = ctk.CTkTextbox(
             self.message_frame,
-            text=message,
-            wraplength=600,
-            justify="left",
+            wrap="word",
             font=ctk.CTkFont(size=13),
-            anchor="nw"
+            height=10
         )
-        self.message_label.pack(fill="x", padx=10, pady=10)
+        self.message_text.pack(fill="both", expand=True, padx=10, pady=10)
+        self.message_text.insert("0.0", message)
+        self.message_text.configure(state="disabled")  # Make read-only
+        
+        # Expand/Collapse button for assistant messages
+        if role == "assistant" and len(message) > 500:
+            self.toggle_btn = ctk.CTkButton(
+                self.message_frame,
+                text="📋 Показать полностью",
+                command=self._toggle_expand,
+                width=150,
+                height=25,
+                font=ctk.CTkFont(size=11),
+                fg_color="#3a3a3a",
+                hover_color="#4a4a4a"
+            )
+            self.toggle_btn.pack(padx=10, pady=(0, 10))
+    
+    def _toggle_expand(self):
+        """Toggle between expanded and collapsed state."""
+        self.is_expanded = not self.is_expanded
+        
+        if self.is_expanded:
+            self.message_text.configure(height=30)  # More lines when expanded
+            self.toggle_btn.configure(text="📄 Свернуть")
+        else:
+            self.message_text.configure(height=10)  # Fewer lines when collapsed
+            self.toggle_btn.configure(text="📋 Показать полностью")
     
     def update_message(self, new_content: str):
         """Update the message content (for streaming)."""
-        self.message_label.configure(text=new_content)
+        self.full_message = new_content
+        self.message_text.configure(state="normal")
+        self.message_text.delete("0.0", "end")
+        self.message_text.insert("0.0", new_content)
+        self.message_text.configure(state="disabled")
 
 
 class SettingsDialog(ctk.CTkToplevel):
