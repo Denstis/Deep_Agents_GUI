@@ -296,12 +296,12 @@ def get_execute_command_tool(full_access: bool = False, allowed_commands: list =
     execute_cmd = partial(base_func, full_access=full_access, allowed_commands=allowed_commands)
     
     # Copy metadata from the original tool (required for LangChain tool system)
-    if hasattr(SimpleFilesystemTools.execute_command, 'name'):
-        execute_cmd.__name__ = SimpleFilesystemTools.execute_command.name
+    if hasattr(SimpleFilesystemTools.execute_command, '__name__'):
+        execute_cmd.__name__ = SimpleFilesystemTools.execute_command.__name__
     else:
         execute_cmd.__name__ = 'execute_command'
-    if hasattr(SimpleFilesystemTools.execute_command, 'description'):
-        execute_cmd.__doc__ = SimpleFilesystemTools.execute_command.description
+    if hasattr(SimpleFilesystemTools.execute_command, '__doc__'):
+        execute_cmd.__doc__ = SimpleFilesystemTools.execute_command.__doc__
     if hasattr(SimpleFilesystemTools.execute_command, 'args_schema'):
         execute_cmd.args_schema = SimpleFilesystemTools.execute_command.args_schema
     
@@ -1707,7 +1707,7 @@ class DeepAgentsGUI(ctk.CTk):
             tools = self._get_configured_tools()
             
             logger.info(f"Total tools available: {len(tools)}")
-            tool_names = [t.name for t in tools]
+            tool_names = [getattr(t, 'name', getattr(t, '__name__', 'unknown')) for t in tools]
             logger.debug(f"Tool names: {tool_names}")
             
             # Store tool names for display during agent execution
