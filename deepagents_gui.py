@@ -40,7 +40,7 @@ import httpx
 # Import modular components
 from core.utils import LMStudioClient
 from core.tools import SimpleFilesystemTools, get_execute_command_tool, WebSearchTools, MathTools
-from core.gui import ChatWindow, MessageBubble
+from core.gui import ChatWindow, MessageBubble, ProcessWindow, ToolExecutionPanel
 
 # Note: Old message_bubble.py module replaced by core.gui package
 # from message_bubble import MessageBubble, calculate_text_height  # DEPRECATED
@@ -837,12 +837,13 @@ class DeepAgentsGUI(ctk.CTk):
         """Create main content area with chat and tools."""
         main_frame = ctk.CTkFrame(self, fg_color="transparent")
         main_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
-        main_frame.grid_columnconfigure(0, weight=1)
+        main_frame.grid_columnconfigure(0, weight=3)  # Chat area (larger)
+        main_frame.grid_columnconfigure(1, weight=1)  # Process panel (smaller)
         main_frame.grid_rowconfigure(0, weight=1)
         
-        # Chat area
+        # Left side: Chat area
         chat_container = ctk.CTkFrame(main_frame, fg_color="#1e1e1e")
-        chat_container.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
+        chat_container.grid(row=0, column=0, sticky="nsew", padx=(0, 5), pady=0)
         chat_container.grid_columnconfigure(0, weight=1)
         chat_container.grid_rowconfigure(0, weight=1)
         
@@ -858,7 +859,7 @@ class DeepAgentsGUI(ctk.CTk):
         self._add_welcome_message()
         
         # Input area
-        input_frame = ctk.CTkFrame(main_frame, height=100, fg_color="#2b2b2b")
+        input_frame = ctk.CTkFrame(chat_container, height=100, fg_color="#2b2b2b")
         input_frame.grid(row=1, column=0, sticky="ew", padx=0, pady=(10, 0))
         input_frame.grid_columnconfigure(0, weight=1)
         
@@ -886,6 +887,24 @@ class DeepAgentsGUI(ctk.CTk):
         
         # Bind Enter key
         self.input_text.bind("<Control-Return>", lambda e: self._send_message())
+        
+        # Right side: Process window panel
+        process_container = ctk.CTkFrame(main_frame, fg_color="#1e1e1e", width=350)
+        process_container.grid(row=0, column=1, sticky="nsew", padx=(5, 0), pady=0)
+        process_container.grid_columnconfigure(0, weight=1)
+        process_container.grid_rowconfigure(0, weight=1)
+        
+        # Process window for displaying agent actions and tool usage
+        self.process_window = ProcessWindow(
+            process_container,
+            max_events=500,
+            fg_color="transparent"
+        )
+        self.process_window.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+        
+        # Tool execution panel (shows current tool being executed)
+        self.tool_panel = ToolExecutionPanel(process_container, fg_color="#2a2a2a")
+        self.tool_panel.grid(row=1, column=0, sticky="ew", padx=5, pady=(0, 5))
     
     def _create_status_bar(self):
         """Create status bar at bottom."""
@@ -1213,6 +1232,10 @@ class DeepAgentsGUI(ctk.CTk):
         try:
             logger.info(f"Processing message: {message[:50]}...")
             
+            # Activate process window
+            self.after(0, lambda: self.process_window.set_active(True))
+            self.after(0, lambda: self.process_window.add_action("Начало обработки запроса", details=message))
+            
             # Get model - use selected model from dropdown if available
             model_name = self.settings.get("model_name")
             # If no model selected in settings but we have a selection from dropdown, use that
@@ -1266,12 +1289,30 @@ class DeepAgentsGUI(ctk.CTk):
             
             # Track tool usage for display
             self.after(0, lambda: self._update_status(f"Processing... Tools: {', '.join(self.current_tool_names[:3])}..."))
+            self.after(0, lambda: self.process_window.add_info(f"Доступные инструменты: {len(tools)}"))
             
             response = agent.invoke(
                 {"messages": self.conversation_history},
                 config=config
             )
             logger.info("Agent invocation complete")
+            
+            # Process intermediate messages (tool calls, etc.)
+            messages = response.get("messages", [])
+            for msg in messages[:-1]:  # Exclude final response
+                if hasattr(msg, 'tool_calls') and msg.tool_calls:
+                    for tc in msg.tool_calls:
+                        tool_name = tc.get('name', 'unknown')
+                        tool_args = tc.get('args', {})
+                        self.after(0, lambda tn=tool_name, ta=tool_args: (
+                            self.process_window.add_action(f"Вызов инструмента: {tn}"),
+                            self.tool_panel.start_tool(tn, ta)
+                        ))
+                elif hasattr(msg, 'type') and msg.type == 'tool':
+                    # Tool result
+                    tool_output = msg.content if hasattr(msg, 'content') else str(msg)
+                    self.after(0, lambda: self.tool_panel.stop_tool())
+                    self.after(0, lambda: self.process_window.add_success("Инструмент выполнен"))
             
             # Get assistant response
             assistant_message = response["messages"][-1]
@@ -1282,11 +1323,15 @@ class DeepAgentsGUI(ctk.CTk):
             self.conversation_history.append(AIMessage(content=assistant_content))
             
             # Update UI in main thread
+            self.after(0, lambda: self.process_window.add_message("Ответ получен"))
+            self.after(0, lambda: self.process_window.set_active(False))
             self.after(0, lambda: self._display_assistant_response(assistant_content))
             
         except Exception as e:
             logger.error(f"Message processing failed: {str(e)}", exc_info=True)
             error_msg = f"Error: {str(e)}\n\nPlease ensure LM Studio is running and a model is loaded."
+            self.after(0, lambda: self.process_window.add_error(str(e)))
+            self.after(0, lambda: self.process_window.set_active(False))
             self.after(0, lambda: self._display_assistant_response(error_msg))
         
         finally:
