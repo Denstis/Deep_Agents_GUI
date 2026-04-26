@@ -20,7 +20,7 @@ class TestDeepAgentsGUIController:
     
     def test_controller_creation(self):
         """Test basic controller creation."""
-        from deepagents.gui_integration import DeepAgentsGUIController
+        from core.gui_integration import DeepAgentsGUIController
         
         controller = DeepAgentsGUIController(
             model_name="test-model",
@@ -35,7 +35,7 @@ class TestDeepAgentsGUIController:
     
     def test_controller_default_values(self):
         """Test controller with default values."""
-        from deepagents.gui_integration import DeepAgentsGUIController
+        from core.gui_integration import DeepAgentsGUIController
         
         controller = DeepAgentsGUIController()
         
@@ -47,7 +47,7 @@ class TestDeepAgentsGUIController:
     
     def test_get_tools_metadata(self):
         """Test retrieving tool metadata."""
-        from deepagents.gui_integration import DeepAgentsGUIController
+        from core.gui_integration import DeepAgentsGUIController
         
         controller = DeepAgentsGUIController(langsmith_enabled=False)
         metadata = controller.get_tools_metadata()
@@ -64,7 +64,7 @@ class TestDeepAgentsGUIController:
     
     def test_tool_states_initialization(self):
         """Test that tool states are properly initialized after init."""
-        from deepagents.gui_integration import DeepAgentsGUIController
+        from core.gui_integration import DeepAgentsGUIController
         
         controller = DeepAgentsGUIController(langsmith_enabled=False)
         
@@ -77,7 +77,7 @@ class TestDeepAgentsGUIController:
              patch.object(controller, '_build_graph', return_value=None):
             
             # Manually set tools for testing
-            from deepagents.tools import create_filesystem_tools
+            from core.tools import create_filesystem_tools
             controller.tools = create_filesystem_tools()
             
             # Initialize tool states
@@ -89,7 +89,7 @@ class TestDeepAgentsGUIController:
     
     def test_set_tool_enabled(self):
         """Test enabling/disabling tools."""
-        from deepagents.gui_integration import DeepAgentsGUIController
+        from core.gui_integration import DeepAgentsGUIController
         
         controller = DeepAgentsGUIController(langsmith_enabled=False)
         
@@ -117,7 +117,7 @@ class TestDeepAgentsGUIController:
     
     def test_get_enabled_tools(self):
         """Test getting list of enabled tools."""
-        from deepagents.gui_integration import DeepAgentsGUIController
+        from core.gui_integration import DeepAgentsGUIController
         
         controller = DeepAgentsGUIController(langsmith_enabled=False)
         
@@ -139,7 +139,7 @@ class TestDeepAgentsGUIController:
     
     def test_export_config(self):
         """Test configuration export."""
-        from deepagents.gui_integration import DeepAgentsGUIController
+        from core.gui_integration import DeepAgentsGUIController
         
         controller = DeepAgentsGUIController(
             model_name="test-model",
@@ -159,7 +159,7 @@ class TestDeepAgentsGUIController:
     
     def test_import_config(self):
         """Test configuration import."""
-        from deepagents.gui_integration import DeepAgentsGUIController
+        from core.gui_integration import DeepAgentsGUIController
         
         controller = DeepAgentsGUIController(langsmith_enabled=False)
         
@@ -183,7 +183,7 @@ class TestDeepAgentsGUIController:
     
     def test_import_config_invalid(self):
         """Test importing invalid configuration."""
-        from deepagents.gui_integration import DeepAgentsGUIController
+        from core.gui_integration import DeepAgentsGUIController
         
         controller = DeepAgentsGUIController(langsmith_enabled=False)
         
@@ -193,7 +193,7 @@ class TestDeepAgentsGUIController:
     
     def test_get_current_state_empty(self):
         """Test getting state when no thread is active."""
-        from deepagents.gui_integration import DeepAgentsGUIController
+        from core.gui_integration import DeepAgentsGUIController
         
         controller = DeepAgentsGUIController(langsmith_enabled=False)
         controller.current_thread_id = None
@@ -204,7 +204,7 @@ class TestDeepAgentsGUIController:
     @pytest.mark.asyncio
     async def test_process_message_not_initialized(self):
         """Test processing message when agent not initialized."""
-        from deepagents.gui_integration import DeepAgentsGUIController
+        from core.gui_integration import DeepAgentsGUIController
         
         controller = DeepAgentsGUIController(langsmith_enabled=False)
         controller.is_initialized = False
@@ -220,7 +220,7 @@ class TestDeepAgentsGUIController:
     @pytest.mark.asyncio
     async def test_submit_approval_no_thread(self):
         """Test submitting approval without active thread."""
-        from deepagents.gui_integration import DeepAgentsGUIController
+        from core.gui_integration import DeepAgentsGUIController
         
         controller = DeepAgentsGUIController(langsmith_enabled=False)
         controller.current_thread_id = None
@@ -236,7 +236,7 @@ class TestGraphStructureProvider:
     
     def test_get_graph_structure(self):
         """Test getting graph structure for visualization."""
-        from deepagents.gui_integration import get_graph_structure
+        from core.gui_integration import get_graph_structure
         
         structure = get_graph_structure()
         
@@ -270,14 +270,14 @@ class TestLangSmithConfiguration:
     
     def test_configure_langsmith_disabled(self):
         """Test LangSmith configuration when disabled."""
-        from deepagents.gui_integration import configure_langsmith
+        from core.gui_integration import configure_langsmith
         
         result = configure_langsmith(enabled=False)
         assert result is False
     
     def test_configure_langsmith_no_api_key(self, monkeypatch):
         """Test LangSmith configuration without API key."""
-        from deepagents.gui_integration import configure_langsmith
+        from core.gui_integration import configure_langsmith
         
         # Ensure no API key is set
         monkeypatch.delenv("LANGSMITH_API_KEY", raising=False)
@@ -295,7 +295,7 @@ class TestLangSmithConfiguration:
     
     def test_configure_langsmith_with_api_key(self, monkeypatch):
         """Test LangSmith configuration with API key."""
-        from deepagents.gui_integration import configure_langsmith
+        from core.gui_integration import configure_langsmith
         
         # Clear any existing key
         monkeypatch.delenv("LANGSMITH_API_KEY", raising=False)
@@ -317,7 +317,7 @@ class TestIntegration:
     
     def test_full_workflow(self):
         """Test complete workflow: create, configure, export, import."""
-        from deepagents.gui_integration import DeepAgentsGUIController
+        from core.gui_integration import DeepAgentsGUIController
         
         # Step 1: Create controller
         controller1 = DeepAgentsGUIController(
@@ -345,7 +345,7 @@ class TestIntegration:
     
     def test_tool_metadata_consistency(self):
         """Test that tool metadata is consistent across calls."""
-        from deepagents.gui_integration import DeepAgentsGUIController
+        from core.gui_integration import DeepAgentsGUIController
         
         controller = DeepAgentsGUIController(langsmith_enabled=False)
         
