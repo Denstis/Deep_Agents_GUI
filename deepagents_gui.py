@@ -949,7 +949,7 @@ class SettingsDialog(ctk.CTkToplevel):
             frame,
             variable=switch_var,
             text="Вкл" if enabled else "Выкл",
-            command=lambda s=switch, t=title: s.configure(text="Вкл" if s.get() else "Выкл"),
+            command=lambda v=switch_var, t=title: t.configure(text="Вкл" if v.get() else "Выкл"),
             state="disabled" if disabled else "normal"
         )
         switch.pack(side="right", padx=15, pady=10)
