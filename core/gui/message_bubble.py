@@ -85,8 +85,8 @@ class CodeBlockFrame(ctk.CTkFrame):
             # Автовысота на основе количества строк (минимум 2 строки для компактности)
             lines = code.count('\n') + 1
             min_lines = max(lines, 2)  # Минимум 2 строки для однострочного кода
-            dynamic_height = min(max(min_lines * 18 + 10, 36), 400)
-            self.text_widget.configure(height=dynamic_height // 18)
+            # Устанавливаем высоту в строках (не в пикселях)
+            self.text_widget.configure(height=min_lines)
     
     def _get_internal_text(self):
         """Получить доступ к внутреннему tk.Text виджету."""
@@ -291,6 +291,15 @@ class MessageBubble(ctk.CTkFrame):
         if internal_text is None:
             return
         
+        # Даём виджету время на рендеринг перед расчётом
+        self.after(10, self._do_resize_height)
+    
+    def _do_resize_height(self):
+        """Фактический расчёт высоты (вызывается после рендеринга)."""
+        internal_text = self._get_internal_text()
+        if internal_text is None:
+            return
+        
         # Параметры для расчёта
         font_normal = tkfont.Font(family='Arial', size=12)
         font_code = tkfont.Font(family='Consolas', size=11)
@@ -300,36 +309,42 @@ class MessageBubble(ctk.CTkFrame):
         
         total_height_px = 0
         text_line_count = 0
-        code_block_count = 0
         
-        # Проходим по всем строкам текста (без window_names, который может не работать)
+        # Считаем строки обычного текста (исключая окна)
         try:
-            total_lines = int(float(internal_text.index('end-1c').split('.')[0]))
-            text_line_count = total_lines
+            # Получаем общее количество строк
+            end_index = internal_text.index('end-1c')
+            total_lines = int(float(end_index.split('.')[0]))
+            
+            # Вычитаем строки, занятые блоками кода (каждый блок + пустая строка после)
+            code_lines_used = len(self._code_blocks) * 2  # блок + \n
+            text_line_count = max(1, total_lines - code_lines_used)
         except:
             text_line_count = 1
-        
-        # Проверяем наличие блоков кода через winfo_children()
-        code_block_count = len(self._code_blocks)
         
         # Расчёт высоты текстовой части
         if text_line_count > 0:
             total_height_px += text_line_count * line_height_normal
         
-        # Добавляем высоту блоков кода (если они есть)
+        # Добавляем высоту блоков кода
         for code_block in self._code_blocks:
+            # Принудительно обновляем геометрию
+            code_block.update_idletasks()
+            
             if hasattr(code_block, 'winfo_reqheight'):
                 code_height = code_block.winfo_reqheight()
-                if code_height > 0:
+                if code_height > 0 and code_height < 10000:  # Защита от некорректных значений
                     total_height_px += code_height
                 else:
                     # Если высота ещё не рассчитана, оцениваем по количеству строк
                     code_lines = code_block.code.count('\n') + 1
-                    total_height_px += code_lines * line_height_code + 35  # +35 на хедер и отступы
+                    min_lines = max(code_lines, 2)  # Минимум 2 строки
+                    estimated_height = min_lines * line_height_code + 35  # +35 на хедер и отступы
+                    total_height_px += estimated_height
         
-        # Добавляем межблочные интервалы
-        if code_block_count > 0:
-            total_height_px += code_block_count * 5  # spacing1+spacing3
+        # Добавляем межблочные интервалы (5px сверху и снизу каждого блока)
+        if self._code_blocks:
+            total_height_px += len(self._code_blocks) * 10
         
         # Минимальная высота для однострочных сообщений
         min_height_px = line_height_normal + self._padding_y * 2
@@ -339,7 +354,6 @@ class MessageBubble(ctk.CTkFrame):
         total_height_px = max(min_height_px, min(total_height_px, max_height_px))
         
         # Конвертируем пиксели в строки для CTkTextbox
-        # height параметр задаётся в строках, поэтому делим на высоту строки
         calculated_lines = max(1, int(total_height_px / line_height_normal))
         
         # Устанавливаем высоту
