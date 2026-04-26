@@ -292,18 +292,15 @@ def get_execute_command_tool(full_access: bool = False, allowed_commands: list =
     # The @tool decorator creates a StructuredTool with the original function in .func
     base_func = SimpleFilesystemTools.execute_command.func
     
-    # Create partial application with security settings
-    execute_cmd = partial(base_func, full_access=full_access, allowed_commands=allowed_commands)
+    # Create a wrapper function instead of partial to maintain introspection capability
+    def execute_cmd_wrapper(command: str, cwd: str | None = None) -> str:
+        return base_func(command=command, cwd=cwd, full_access=full_access, allowed_commands=allowed_commands)
     
     # Copy metadata from the original tool (required for LangChain tool system)
-    if hasattr(SimpleFilesystemTools.execute_command, '__name__'):
-        execute_cmd.__name__ = SimpleFilesystemTools.execute_command.__name__
-    else:
-        execute_cmd.__name__ = 'execute_command'
-    if hasattr(SimpleFilesystemTools.execute_command, '__doc__'):
-        execute_cmd.__doc__ = SimpleFilesystemTools.execute_command.__doc__
-    if hasattr(SimpleFilesystemTools.execute_command, 'args_schema'):
-        execute_cmd.args_schema = SimpleFilesystemTools.execute_command.args_schema
+    execute_cmd_wrapper.__name__ = 'execute_command'
+    execute_cmd_wrapper.__doc__ = SimpleFilesystemTools.execute_command.__doc__
+    
+    execute_cmd = execute_cmd_wrapper
     
     return execute_cmd
 
