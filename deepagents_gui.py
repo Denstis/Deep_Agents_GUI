@@ -293,8 +293,8 @@ def get_execute_command_tool(full_access: bool = False, allowed_commands: list =
     base_func = SimpleFilesystemTools.execute_command.func
     
     # Create a wrapper function instead of partial to maintain introspection capability
-    def execute_cmd_wrapper(command: str, cwd: str | None = None) -> str:
-        return base_func(command=command, cwd=cwd, full_access=full_access, allowed_commands=allowed_commands)
+    def execute_cmd_wrapper(command: str) -> str:
+        return base_func(command=command, full_access=full_access, allowed_commands=allowed_commands)
     
     # Copy metadata from the original tool (required for LangChain tool system)
     execute_cmd_wrapper.__name__ = 'execute_command'
@@ -1020,14 +1020,13 @@ class SettingsDialog(ctk.CTkToplevel):
         ).pack(anchor="w", padx=15, pady=(0, 5))
         
         allowed_commands = tools.get("allowed_commands", ["ls", "dir", "cat", "head", "tail", "pwd", "echo", "find", "grep"])
-        self.allowed_commands_entry = ctk.CTkTextbox(
+        self.allowed_commands_entry = ctk.CTkEntry(
             self.allowed_commands_frame,
-            height=100,
             font=ctk.CTkFont(size=12),
-            wrap="word"
+            height=30
         )
-        self.allowed_commands_entry.pack(fill="both", expand=True, padx=15, pady=5)
-        self.allowed_commands_entry.insert("0.0", ", ".join(allowed_commands))
+        self.allowed_commands_entry.pack(fill="x", expand=True, padx=15, pady=5)
+        self.allowed_commands_entry.insert(0, ", ".join(allowed_commands))
         
         # Обновить состояние UI
         self._update_security_ui()
@@ -1111,7 +1110,7 @@ class SettingsDialog(ctk.CTkToplevel):
             "command_full_access": self.full_access_var.get(),
             "allowed_commands": [
                 cmd.strip() 
-                for cmd in self.allowed_commands_entry.get("0.0", "end-1c").split(",") 
+                for cmd in self.allowed_commands_entry.get().split(",") 
                 if cmd.strip()
             ],
         }
