@@ -545,12 +545,15 @@ class MessageBubble(ctk.CTkFrame):
             self.message_frame,
             wrap="word",
             font=ctk.CTkFont(size=13),
-            height=10,
-            activate_scrollbars=True
+            height=1,  # Start with minimal height, will auto-resize
+            activate_scrollbars=False  # Disable scrollbar for auto-height
         )
         self.message_text.pack(fill="both", expand=True, padx=10, pady=10)
         self.message_text.insert("0.0", message)
         self.message_text.configure(state="disabled")  # Make read-only
+        
+        # Auto-resize text widget to fit content
+        self._auto_resize_text()
         
         # Button frame for expand/collapse and copy
         self.btn_frame = ctk.CTkFrame(self.message_frame, fg_color="transparent")
@@ -592,15 +595,27 @@ class MessageBubble(ctk.CTkFrame):
         self.copy_btn.configure(text="✓ Скопировано!")
         self.after(1500, lambda: self.copy_btn.configure(text=original_text))
     
+    def _auto_resize_text(self):
+        """Auto-resize text widget to fit content."""
+        # Get number of lines in the text
+        line_count = int(self.message_text.index('end-1c').split('.')[0])
+        # Set height to fit all lines (with a reasonable max)
+        max_height = 25
+        new_height = min(max(line_count, 3), max_height)
+        self.message_text.configure(height=new_height)
+    
     def _toggle_expand(self):
         """Toggle between expanded and collapsed state."""
         self.is_expanded = not self.is_expanded
         
         if self.is_expanded:
-            self.message_text.configure(height=30)  # More lines when expanded
+            # Show full content without height limit
+            line_count = int(self.message_text.index('end-1c').split('.')[0])
+            self.message_text.configure(height=line_count + 2)
             self.toggle_btn.configure(text="📄 Свернуть")
         else:
-            self.message_text.configure(height=10)  # Fewer lines when collapsed
+            # Return to auto-resized height
+            self._auto_resize_text()
             self.toggle_btn.configure(text="📋 Показать полностью")
     
     def update_message(self, new_content: str):
@@ -610,6 +625,8 @@ class MessageBubble(ctk.CTkFrame):
         self.message_text.delete("0.0", "end")
         self.message_text.insert("0.0", new_content)
         self.message_text.configure(state="disabled")
+        # Auto-resize after update
+        self._auto_resize_text()
 
 
 class SettingsDialog(ctk.CTkToplevel):
@@ -1169,6 +1186,7 @@ class DeepAgentsGUI(ctk.CTk):
         self.current_tool_calls: list = []
         self.current_tool_names: list = []  # Store available tool names for display
         self.tasks: list = []  # List of tasks/conversations
+        self.last_assistant_bubble = None  # Track last assistant bubble for updates
         
         # Setup UI
         self._setup_ui()
@@ -1611,6 +1629,9 @@ class DeepAgentsGUI(ctk.CTk):
         if not message:
             return
         
+        # Reset last assistant bubble when user sends new message
+        self.last_assistant_bubble = None
+        
         # Add user message to UI
         self._add_message_bubble(message, role="user")
         self.conversation_history.append(HumanMessage(content=message))
@@ -1768,10 +1789,17 @@ class DeepAgentsGUI(ctk.CTk):
     
     def _display_assistant_response(self, content: str):
         """Display assistant response in chat."""
-        bubble = self._add_message_bubble(content, role="assistant")
+        # Check if we need to update existing bubble or create new one
+        if self.last_assistant_bubble is not None:
+            # Update existing bubble instead of creating new one
+            self.last_assistant_bubble.update_message(content)
+        else:
+            # Create new bubble
+            bubble = self._add_message_bubble(content, role="assistant")
+            self.last_assistant_bubble = bubble
         
         # Store reference for potential updates
-        self.current_bubble = bubble
+        self.current_bubble = self.last_assistant_bubble
 
 
 def main():
