@@ -135,6 +135,20 @@ class LMStudioClient:
         except Exception as e:
             logger.error(f"Failed to get models: {str(e)}")
         return []
+    
+    async def get_model_info(self, model_id: str) -> dict:
+        """Get detailed information about a specific model including max_tokens."""
+        try:
+            logger.debug(f"Fetching info for model: {model_id}")
+            async with httpx.AsyncClient() as client:
+                response = await client.get(f"{self.base_url}/v1/models/{model_id}", timeout=5.0)
+                if response.status_code == 200:
+                    data = response.json()
+                    logger.info(f"Model info retrieved: {model_id}")
+                    return data
+        except Exception as e:
+            logger.error(f"Failed to get model info: {str(e)}")
+        return {}
 
 
 class SimpleFilesystemTools:
@@ -447,7 +461,7 @@ class ImageTools:
 
 
 class MessageBubble(ctk.CTkFrame):
-    """A message bubble widget for chat display."""
+    """A message bubble widget for chat display with collapsible content."""
     
     def __init__(
         self,
@@ -460,6 +474,9 @@ class MessageBubble(ctk.CTkFrame):
         super().__init__(master, **kwargs)
         
         self.role = role
+        self.is_expanded = False
+        self.full_message = message
+        self.collapsed_lines = 15  # Количество видимых строк в свернутом режиме
         self.configure(corner_radius=10, fg_color="transparent")
         logger.debug(f"MessageBubble created: role={role}, message_len={len(message)}")
         
@@ -480,27 +497,84 @@ class MessageBubble(ctk.CTkFrame):
         )
         self.role_label.pack(fill="x", padx=5, pady=(5, 0))
         
-        # Message content
+        # Message content frame
         self.message_frame = ctk.CTkFrame(
             self,
             corner_radius=10,
             fg_color="#2b2b2b" if role == "assistant" else "#3a3a3a"
         )
-        self.message_frame.pack(fill="x", expand=True, padx=5, pady=5)
+        self.message_frame.pack(fill="both", expand=True, padx=5, pady=5)
         
-        self.message_label = ctk.CTkLabel(
+        # Text widget with scrollbar for long messages
+        self.message_text = ctk.CTkTextbox(
             self.message_frame,
-            text=message,
-            wraplength=600,
-            justify="left",
+            wrap="word",
             font=ctk.CTkFont(size=13),
-            anchor="nw"
+            height=10,
+            activate_scrollbars=True
         )
-        self.message_label.pack(fill="x", padx=10, pady=10)
+        self.message_text.pack(fill="both", expand=True, padx=10, pady=10)
+        self.message_text.insert("0.0", message)
+        self.message_text.configure(state="disabled")  # Make read-only
+        
+        # Button frame for expand/collapse and copy
+        self.btn_frame = ctk.CTkFrame(self.message_frame, fg_color="transparent")
+        self.btn_frame.pack(fill="x", padx=10, pady=(0, 10))
+        
+        # Expand/Collapse button for assistant messages
+        if role == "assistant" and len(message) > 500:
+            self.toggle_btn = ctk.CTkButton(
+                self.btn_frame,
+                text="📋 Показать полностью",
+                command=self._toggle_expand,
+                width=150,
+                height=25,
+                font=ctk.CTkFont(size=11),
+                fg_color="#3a3a3a",
+                hover_color="#4a4a4a"
+            )
+            self.toggle_btn.pack(side="left", padx=(0, 5))
+        
+        # Copy button
+        self.copy_btn = ctk.CTkButton(
+            self.btn_frame,
+            text="📋 Копировать",
+            command=self._copy_to_clipboard,
+            width=120,
+            height=25,
+            font=ctk.CTkFont(size=11),
+            fg_color="#3a3a3a",
+            hover_color="#4a4a4a"
+        )
+        self.copy_btn.pack(side="right")
+    
+    def _copy_to_clipboard(self):
+        """Copy message content to clipboard."""
+        self.clipboard_clear()
+        self.clipboard_append(self.full_message)
+        # Show temporary feedback
+        original_text = self.copy_btn.cget("text")
+        self.copy_btn.configure(text="✓ Скопировано!")
+        self.after(1500, lambda: self.copy_btn.configure(text=original_text))
+    
+    def _toggle_expand(self):
+        """Toggle between expanded and collapsed state."""
+        self.is_expanded = not self.is_expanded
+        
+        if self.is_expanded:
+            self.message_text.configure(height=30)  # More lines when expanded
+            self.toggle_btn.configure(text="📄 Свернуть")
+        else:
+            self.message_text.configure(height=10)  # Fewer lines when collapsed
+            self.toggle_btn.configure(text="📋 Показать полностью")
     
     def update_message(self, new_content: str):
         """Update the message content (for streaming)."""
-        self.message_label.configure(text=new_content)
+        self.full_message = new_content
+        self.message_text.configure(state="normal")
+        self.message_text.delete("0.0", "end")
+        self.message_text.insert("0.0", new_content)
+        self.message_text.configure(state="disabled")
 
 
 class SettingsDialog(ctk.CTkToplevel):
@@ -638,6 +712,63 @@ class SettingsDialog(ctk.CTkToplevel):
             font=ctk.CTkFont(size=12)
         )
         self.temp_value.pack(anchor="e")
+        
+        # Max tokens
+        tokens_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        tokens_frame.pack(fill="x", pady=10)
+        
+        ctk.CTkLabel(
+            tokens_frame,
+            text="Max Tokens (лимит ответа):",
+            font=ctk.CTkFont(size=13)
+        ).pack(anchor="w")
+        
+        self.max_tokens_entry = ctk.CTkEntry(
+            tokens_frame,
+            width=150,
+            placeholder_text="4096"
+        )
+        self.max_tokens_entry.pack(anchor="w", pady=5)
+        if self.current_settings.get("max_tokens"):
+            self.max_tokens_entry.insert(0, str(self.current_settings["max_tokens"]))
+        
+        # Timeout
+        timeout_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        timeout_frame.pack(fill="x", pady=10)
+        
+        ctk.CTkLabel(
+            timeout_frame,
+            text="Timeout (секунды на запрос):",
+            font=ctk.CTkFont(size=13)
+        ).pack(anchor="w")
+        
+        self.timeout_entry = ctk.CTkEntry(
+            timeout_frame,
+            width=150,
+            placeholder_text="120"
+        )
+        self.timeout_entry.pack(anchor="w", pady=5)
+        if self.current_settings.get("timeout_seconds"):
+            self.timeout_entry.insert(0, str(self.current_settings["timeout_seconds"]))
+        
+        # Retry attempts
+        retry_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        retry_frame.pack(fill="x", pady=10)
+        
+        ctk.CTkLabel(
+            retry_frame,
+            text="Попытки повтора при ошибке:",
+            font=ctk.CTkFont(size=13)
+        ).pack(anchor="w")
+        
+        self.retry_entry = ctk.CTkEntry(
+            retry_frame,
+            width=150,
+            placeholder_text="3"
+        )
+        self.retry_entry.pack(anchor="w", pady=5)
+        if self.current_settings.get("retry_attempts"):
+            self.retry_entry.insert(0, str(self.current_settings["retry_attempts"]))
         
         # Working directory
         workdir_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
@@ -913,6 +1044,28 @@ class SettingsDialog(ctk.CTkToplevel):
         self.current_settings["temperature"] = self.temp_slider.get()
         self.current_settings["working_dir"] = self.workdir_entry.get() or str(Path.cwd())
         
+        # Сохранение расширенных настроек модели
+        max_tokens_str = self.max_tokens_entry.get().strip()
+        if max_tokens_str:
+            try:
+                self.current_settings["max_tokens"] = int(max_tokens_str)
+            except ValueError:
+                self.current_settings["max_tokens"] = 4096
+        
+        timeout_str = self.timeout_entry.get().strip()
+        if timeout_str:
+            try:
+                self.current_settings["timeout_seconds"] = int(timeout_str)
+            except ValueError:
+                self.current_settings["timeout_seconds"] = 120
+        
+        retry_str = self.retry_entry.get().strip()
+        if retry_str:
+            try:
+                self.current_settings["retry_attempts"] = int(retry_str)
+            except ValueError:
+                self.current_settings["retry_attempts"] = 3
+        
         # Сохранение настроек инструментов
         tools_settings = {
             "filesystem_enabled": getattr(self, "_filesystem_enabled_var", ctk.BooleanVar(value=True)).get(),
@@ -966,8 +1119,14 @@ class DeepAgentsGUI(ctk.CTk):
             "lmstudio_url": "http://localhost:1234",
             "model_name": None,
             "temperature": 0.7,
+            "max_tokens": 4096,  # Default value, will be updated from LM Studio
+            "timeout_seconds": 120,
+            "retry_attempts": 3,
             "working_dir": str(Path.cwd()),
         }
+        
+        # Reference to settings dialog (for updating fields)
+        self._settings_dialog = None
         
         # State
         self.lmstudio_client = LMStudioClient(self.settings["lmstudio_url"])
@@ -1260,6 +1419,11 @@ class DeepAgentsGUI(ctk.CTk):
                         self.model_var.set(models[0] if models else "Select model...")
                     # Update connect button text
                     self.connect_btn.configure(text="🔄 Refresh")
+                    
+                    # Fetch and apply model parameters (max_tokens) for the selected model
+                    selected_model = self.model_var.get()
+                    if selected_model and selected_model in models:
+                        await self._fetch_and_apply_model_params(selected_model)
             else:
                 logger.warning("LM Studio connection failed")
                 self.connection_indicator.configure(text="●", text_color="#e74c3c")
@@ -1285,6 +1449,47 @@ class DeepAgentsGUI(ctk.CTk):
         thread = threading.Thread(target=run_async_check, daemon=True)
         thread.start()
     
+    async def _fetch_and_apply_model_params(self, model_id: str):
+        """Fetch model parameters from LM Studio and apply to settings fields."""
+        logger.info(f"Fetching parameters for model: {model_id}")
+        try:
+            model_info = await self.lmstudio_client.get_model_info(model_id)
+            if model_info:
+                # Extract max_tokens from model info
+                # LM Studio returns different structures, check common paths
+                max_tokens = None
+                
+                # Try different possible paths for max_tokens
+                if 'max_tokens' in model_info:
+                    max_tokens = model_info['max_tokens']
+                elif 'context_length' in model_info:
+                    max_tokens = model_info['context_length']
+                elif 'meta' in model_info and 'max_tokens' in model_info['meta']:
+                    max_tokens = model_info['meta']['max_tokens']
+                elif 'capabilities' in model_info and 'max_tokens' in model_info['capabilities']:
+                    max_tokens = model_info['capabilities']['max_tokens']
+                
+                if max_tokens:
+                    logger.info(f"Model {model_id} max_tokens: {max_tokens}")
+                    # Update the max_tokens field in settings dialog if open
+                    # Store in main settings for later use
+                    self.settings["max_tokens"] = max_tokens
+                    
+                    # If settings dialog is open, update the field
+                    if hasattr(self, '_settings_dialog') and self._settings_dialog:
+                        try:
+                            self._settings_dialog.max_tokens_entry.delete(0, 'end')
+                            self._settings_dialog.max_tokens_entry.insert(0, str(max_tokens))
+                            self.after(0, lambda: self._update_status(f"Max tokens для {model_id}: {max_tokens}"))
+                        except Exception as e:
+                            logger.error(f"Failed to update settings dialog: {e}")
+                    else:
+                        self.after(0, lambda: self._update_status(f"Max tokens для {model_id}: {max_tokens}"))
+                else:
+                    logger.warning(f"Could not find max_tokens in model info for {model_id}")
+        except Exception as e:
+            logger.error(f"Error fetching model parameters: {e}")
+    
     def _on_model_selected(self, selected_model: str):
         """Handle model selection from dropdown."""
         if selected_model and selected_model not in ("Select model...", "No connection"):
@@ -1293,10 +1498,27 @@ class DeepAgentsGUI(ctk.CTk):
             # Update connect button to show Refresh since we have a model selected
             if hasattr(self, 'connect_btn'):
                 self.connect_btn.configure(text="🔄 Refresh")
+            
+            # Fetch and apply model parameters for the newly selected model
+            async def fetch_params():
+                await self._fetch_and_apply_model_params(selected_model)
+            
+            # Run in a new thread with its own event loop
+            def run_fetch():
+                try:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    loop.run_until_complete(fetch_params())
+                    loop.close()
+                except Exception as e:
+                    logger.error(f"Error fetching model params: {e}")
+            
+            thread = threading.Thread(target=run_fetch, daemon=True)
+            thread.start()
     
     def _open_settings(self):
         """Open settings dialog."""
-        SettingsDialog(self, self.settings, self._save_settings)
+        self._settings_dialog = SettingsDialog(self, self.settings, self._save_settings)
     
     def _save_settings(self, new_settings: dict):
         """Save settings and reconnect."""
@@ -1307,6 +1529,7 @@ class DeepAgentsGUI(ctk.CTk):
         tools_settings = self.settings.get("tools_settings", {})
         logger.info(f"Settings updated: tools={tools_settings}")
         
+        self._settings_dialog = None  # Clear reference when dialog is closed
         self._check_lmstudio_connection()
         self._update_status("Настройки сохранены")
     
