@@ -295,11 +295,13 @@ def get_execute_command_tool(full_access: bool = False, allowed_commands: list =
     # Create partial application with security settings
     execute_cmd = partial(base_func, full_access=full_access, allowed_commands=allowed_commands)
     
-    # Copy metadata from the original tool
+    # Copy metadata from the original tool (required for LangChain tool system)
     if hasattr(SimpleFilesystemTools.execute_command, 'name'):
-        execute_cmd.name = SimpleFilesystemTools.execute_command.name
+        execute_cmd.__name__ = SimpleFilesystemTools.execute_command.name
+    else:
+        execute_cmd.__name__ = 'execute_command'
     if hasattr(SimpleFilesystemTools.execute_command, 'description'):
-        execute_cmd.description = SimpleFilesystemTools.execute_command.description
+        execute_cmd.__doc__ = SimpleFilesystemTools.execute_command.description
     if hasattr(SimpleFilesystemTools.execute_command, 'args_schema'):
         execute_cmd.args_schema = SimpleFilesystemTools.execute_command.args_schema
     
