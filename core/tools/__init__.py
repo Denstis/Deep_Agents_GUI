@@ -1,11 +1,12 @@
 """
-Tools Package - Filesystem, Web Search, Math, and Console Command Tools for DeepAgents
+Tools Package - Filesystem, Web Search, Math, Console Command, and Python Tools for DeepAgents
 """
 
 from core.tools.filesystem import SimpleFilesystemTools, get_execute_command_tool
 from core.tools.websearch import WebSearchTools
 from core.tools.math import MathTools
 from core.tools.console_command import ConsoleCommandTool, get_console_command_tool, create_console_tools
+from core.tools.python_tools import get_python_tools, PipInstallTool, RunPythonScriptTool, CheckPythonSyntaxTool, FormatPythonCodeTool
 
 __all__ = [
     "SimpleFilesystemTools",
@@ -15,6 +16,11 @@ __all__ = [
     "ConsoleCommandTool",
     "get_console_command_tool",
     "create_console_tools",
+    "get_python_tools",
+    "PipInstallTool",
+    "RunPythonScriptTool",
+    "CheckPythonSyntaxTool",
+    "FormatPythonCodeTool",
 ]
 
 
