@@ -927,6 +927,39 @@ class DeepAgentsGUI(ctk.CTk):
         # Инициализация лога процесса
         self.thinking_steps = []
     
+    def _clear_thinking_log(self):
+        """Очистка лога процесса работы."""
+        self.thinking_steps.clear()
+        self.thinking_log.configure(state='normal')
+        self.thinking_log.delete('1.0', 'end')
+        self.thinking_log.configure(state='disabled')
+        self.thinking_stats.configure(text="Ожидание запроса...")
+    
+    def _log_thinking_step(self, step_text: str):
+        """
+        Добавление шага в лог процесса работы.
+        
+        Args:
+            step_text: Текст шага (например, "🚀 Начало обработки запроса")
+        """
+        import datetime
+        
+        # Добавляем временную метку
+        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+        log_entry = f"[{timestamp}] {step_text}\n"
+        
+        # Сохраняем в историю
+        self.thinking_steps.append(log_entry.strip())
+        
+        # Обновляем UI в главном потоке
+        self.thinking_log.configure(state='normal')
+        self.thinking_log.insert('end', log_entry)
+        self.thinking_log.see('end')  # Автоскролл к концу
+        self.thinking_log.configure(state='disabled')
+        
+        # Обновляем статистику
+        self.thinking_stats.configure(text=f"Шагов: {len(self.thinking_steps)}")
+    
     def _create_status_bar(self):
         """Create status bar at bottom."""
         status_bar = ctk.CTkFrame(self, height=30, fg_color="#2b2b2b")
@@ -1253,6 +1286,13 @@ class DeepAgentsGUI(ctk.CTk):
         try:
             logger.info(f"Processing message: {message[:50]}...")
             
+            # Очищаем лог процесса работы перед новым запросом
+            self.after(0, lambda: self._clear_thinking_log())
+            
+            # Записываем начало обработки в лог процесса
+            self.after(0, lambda: self._log_thinking_step("🚀 Начало обработки запроса"))
+            self.after(0, lambda: self._log_thinking_step(f"📝 Запрос: {message[:100]}{'...' if len(message) > 100 else ''}"))
+            
             # Get model - use selected model from dropdown if available
             model_name = self.settings.get("model_name")
             # If no model selected in settings but we have a selection from dropdown, use that
@@ -1262,6 +1302,8 @@ class DeepAgentsGUI(ctk.CTk):
                     model_name = selected
             
             logger.info(f"Using model: {model_name or 'local-model'}")
+            self.after(0, lambda m=model_name: self._log_thinking_step(f"🤖 Модель: {m or 'local-model'}"))
+            
             model = self.lmstudio_client.get_chat_model(
                 model_name,
                 self.settings["temperature"]
@@ -1277,10 +1319,14 @@ class DeepAgentsGUI(ctk.CTk):
             # Store tool names for display during agent execution
             self.current_tool_names = tool_names
             
+            # Логируем доступные инструменты
+            self.after(0, lambda t=tool_names: self._log_thinking_step(f"🛠️ Доступные инструменты: {', '.join(t[:5])}{'...' if len(t) > 5 else ''}"))
+            
             # Create agent - use deepagents if available, otherwise basic LangGraph
             if DEEPAGENTS_AVAILABLE:
                 # Use full DeepAgents with all features
                 logger.info("Creating DeepAgent with all tools")
+                self.after(0, lambda: self._log_thinking_step("⚙️ Создание агента (DeepAgents)..."))
                 agent = create_deep_agent(
                     model=model,
                     tools=tools,
@@ -1297,6 +1343,7 @@ class DeepAgentsGUI(ctk.CTk):
             else:
                 # Fallback to basic LangGraph ReAct agent
                 logger.info("Creating LangGraph ReAct agent (deepagents not available)")
+                self.after(0, lambda: self._log_thinking_step("⚙️ Создание агента (LangGraph ReAct)..."))
                 from langgraph.prebuilt import create_react_agent
                 agent = create_react_agent(model, tools)
             
@@ -1306,12 +1353,15 @@ class DeepAgentsGUI(ctk.CTk):
             
             # Track tool usage for display
             self.after(0, lambda: self._update_status(f"Processing... Tools: {', '.join(self.current_tool_names[:3])}..."))
+            self.after(0, lambda: self._log_thinking_step("🔄 Запуск агента..."))
             
             response = agent.invoke(
                 {"messages": self.conversation_history},
                 config=config
             )
             logger.info("Agent invocation complete")
+            
+            self.after(0, lambda: self._log_thinking_step("✅ Генерация ответа завершена"))
             
             # Get assistant response
             assistant_message = response["messages"][-1]
@@ -1327,12 +1377,14 @@ class DeepAgentsGUI(ctk.CTk):
         except Exception as e:
             logger.error(f"Message processing failed: {str(e)}", exc_info=True)
             error_msg = f"Error: {str(e)}\n\nPlease ensure LM Studio is running and a model is loaded."
+            self.after(0, lambda err=str(e): self._log_thinking_step(f"❌ Ошибка: {err}"))
             self.after(0, lambda: self._display_assistant_response(error_msg))
         
         finally:
             self.is_processing = False
             self.after(0, lambda: self.send_btn.configure(state="normal"))
             self.after(0, lambda: self._update_status("Ready"))
+            self.after(0, lambda: self._log_thinking_step("⏸️ Ожидание следующего запроса..."))
     
     def _display_assistant_response(self, content: str):
         """Display assistant response in chat."""
