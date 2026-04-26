@@ -38,20 +38,30 @@ echo.
 :: Активация и обновление pip
 echo [INFO] Активация окружения и обновление pip...
 call venv\Scripts\activate.bat
-python -m pip install --upgrade pip --quiet
+
+echo [INFO] Обновление pip...
+python -m pip install --upgrade pip 2>&1 | findstr /V /C:"Collecting" /C:"Downloading" /C:"Installing" /C:"Successfully"
 
 :: Установка зависимостей
 echo.
 echo [INFO] Установка необходимых библиотек...
-echo Это может занять несколько минут...
+echo Это может занять несколько минут, пожалуйста подождите...
 echo.
 
-pip install -r requirements.txt
+echo [INFO] Установка из requirements.txt...
+pip install -r requirements.txt 2>&1 | findstr /V /C:"Collecting" /C:"Downloading" /C:"Installing" /C:"Successfully" /C:"Requirement already"
 if %errorlevel% neq 0 (
     echo.
     echo [ПРЕДУПРЕЖДЕНИЕ] Файл requirements.txt не найден или содержит ошибки.
     echo Попытка установки базового набора пакетов вручную...
-    pip install langchain langchain-openai langgraph langsmith pydantic pytest tkinter-tooltip
+    pip install langchain langchain-openai langgraph langsmith pydantic pytest customtkinter python-dotenv networkx matplotlib httpx duckduckgo-search sympy
+)
+
+echo.
+echo [ПРОВЕРКА] Проверка установленных пакетов...
+python -c "import langchain; import langgraph; import pydantic; print('[OK] Все пакеты установлены успешно!')" 2>nul
+if %errorlevel% neq 0 (
+    echo [ВНИМАНИЕ] Некоторые пакеты могут быть установлены некорректно.
 )
 
 echo.
