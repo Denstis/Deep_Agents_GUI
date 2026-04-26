@@ -1,16 +1,20 @@
 """
-Tools Package - Filesystem, Web Search, and Math Tools for DeepAgents
+Tools Package - Filesystem, Web Search, Math, and Console Command Tools for DeepAgents
 """
 
 from core.tools.filesystem import SimpleFilesystemTools, get_execute_command_tool
 from core.tools.websearch import WebSearchTools
 from core.tools.math import MathTools
+from core.tools.console_command import ConsoleCommandTool, get_console_command_tool, create_console_tools
 
 __all__ = [
     "SimpleFilesystemTools",
     "get_execute_command_tool",
     "WebSearchTools",
     "MathTools",
+    "ConsoleCommandTool",
+    "get_console_command_tool",
+    "create_console_tools",
 ]
 
 
