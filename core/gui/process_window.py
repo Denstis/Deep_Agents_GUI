@@ -281,15 +281,16 @@ class ProcessWindow(ctk.CTkScrollableFrame):
                 'details': details
             })
     
-    def add_action(self, message: str, details: str = ''):
+    def add_action(self, message: str, details: str = '', immediate: bool = False):
         """Добавление события действия."""
-        self.add_event('action', message, details)
+        self.add_event('action', message, details, immediate=immediate)
     
     def add_tool_use(
         self,
         tool_name: str,
         tool_input: Dict[str, Any],
-        tool_output: str = ''
+        tool_output: str = '',
+        immediate: bool = False
     ):
         """
         Добавление события использования инструмента.
@@ -298,6 +299,7 @@ class ProcessWindow(ctk.CTkScrollableFrame):
             tool_name: Название инструмента
             tool_input: Входные параметры инструмента
             tool_output: Результат выполнения инструмента
+            immediate: Если True, добавляет немедленно
         """
         input_str = ', '.join(f'{k}={v}' for k, v in tool_input.items()) if tool_input else 'нет параметров'
         message = f"Инструмент: {tool_name}"
@@ -305,27 +307,27 @@ class ProcessWindow(ctk.CTkScrollableFrame):
         if tool_output:
             details += f"Выход: {tool_output[:500]}"  # Ограничиваем длину вывода
         
-        self.add_event('tool', message, details)
+        self.add_event('tool', message, details, immediate=immediate)
     
-    def add_message(self, message: str, details: str = ''):
+    def add_message(self, message: str, details: str = '', immediate: bool = False):
         """Добавление информационного сообщения."""
-        self.add_event('message', message, details)
+        self.add_event('message', message, details, immediate=immediate)
     
-    def add_info(self, message: str):
+    def add_info(self, message: str, immediate: bool = False):
         """Добавление информационной записи."""
-        self.add_event('info', message)
+        self.add_event('info', message, immediate=immediate)
     
-    def add_warning(self, message: str, details: str = ''):
+    def add_warning(self, message: str, details: str = '', immediate: bool = False):
         """Добавление предупреждения."""
-        self.add_event('warning', message, details)
+        self.add_event('warning', message, details, immediate=immediate)
     
-    def add_error(self, message: str, details: str = ''):
+    def add_error(self, message: str, details: str = '', immediate: bool = False):
         """Добавление ошибки."""
-        self.add_event('error', message, details)
+        self.add_event('error', message, details, immediate=immediate)
     
-    def add_success(self, message: str):
+    def add_success(self, message: str, immediate: bool = False):
         """Добавление сообщения об успехе."""
-        self.add_event('success', message)
+        self.add_event('success', message, immediate=immediate)
     
     def update_status(self, status: str):
         """
