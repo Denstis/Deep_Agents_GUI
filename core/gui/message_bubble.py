@@ -30,12 +30,15 @@ class MessageBubble(ctk.CTkFrame):
         master: any,
         text: str,
         is_user: bool = False,
-        on_copy: Optional[Callable] = None,
+        error: bool = False,
         **kwargs
     ):
         # Устанавливаем цвета по умолчанию только если не переданы
         if 'fg_color' not in kwargs:
-            kwargs['fg_color'] = '#2b7da0' if is_user else '#3a3a3a'
+            if error:
+                kwargs['fg_color'] = '#8b0000'  # Тёмно-красный для ошибок
+            else:
+                kwargs['fg_color'] = '#2b7da0' if is_user else '#3a3a3a'
         if 'corner_radius' not in kwargs:
             kwargs['corner_radius'] = 12
         if 'border_width' not in kwargs:
@@ -45,7 +48,6 @@ class MessageBubble(ctk.CTkFrame):
         
         self.is_user = is_user
         self.text = text
-        self.on_copy = on_copy
         self._text_widget: Optional[ctk.CTkTextbox] = None
         
         # Конфигурация отступов
@@ -146,8 +148,9 @@ class MessageBubble(ctk.CTkFrame):
     def _bind_copy_event(self):
         """Привязка события двойного клика для копирования."""
         def on_double_click(event):
-            if self.on_copy:
-                self.on_copy(self.text)
+            # Копирование текста в буфер обмена
+            self.clipboard_clear()
+            self.clipboard_append(self.text)
         
         self._text_widget.bind('<Double-Button-1>', on_double_click)
     
@@ -162,11 +165,21 @@ class MessageBubble(ctk.CTkFrame):
         if append:
             self.text += text
             self._text_widget.configure(state='normal')
-            self._text_widget.insert(tk.END, text, 'normal')
+            # Добавляем текст без тега для производительности (стриминг)
+            self._text_widget.insert(tk.END, text)
+            self._text_widget.see(tk.END)  # Автоскролл к концу
             self._text_widget.configure(state='disabled' if not self.is_user else 'normal')
         else:
             self.text = text
             self._insert_formatted_text(text)
+    
+    def append_text(self, text: str):
+        """Быстрое добавление текста для стриминга."""
+        self.update_text(text, append=True)
+    
+    def finalize_content(self):
+        """Финализация сообщения (переформатирование кода после завершения стриминга)."""
+        self._insert_formatted_text(self.text)
     
     def get_height(self) -> int:
         """

@@ -30,7 +30,6 @@ class ChatWindow(ctk.CTkScrollableFrame):
     def __init__(
         self,
         master: any,
-        on_copy: Optional[Callable[[str], None]] = None,
         max_messages: int = 200,
         **kwargs
     ):
@@ -44,7 +43,6 @@ class ChatWindow(ctk.CTkScrollableFrame):
         
         super().__init__(master, **kwargs)
         
-        self.on_copy = on_copy
         self.max_messages = max_messages
         
         # Очередь для потокобезопасных обновлений
@@ -101,21 +99,18 @@ class ChatWindow(ctk.CTkScrollableFrame):
             self,
             text=text,
             is_user=is_user,
-            on_copy=self.on_copy,
             fg_color='#2b7da0' if is_user else '#3a3a3a',
             corner_radius=12
         )
         
-        # Размещение с выравниванием
-        sticky = 'e' if is_user else 'w'
+        # Размещение с выравниванием на всю ширину
+        sticky = 'ew'  # Растягивание на всю ширину
         bubble.grid(
             row=len(self._bubbles),
             column=0,
             sticky=sticky,
             padx=5,
-            pady=5,
-            ipadx=10,
-            ipady=5
+            pady=5
         )
         
         self._bubbles.append(bubble)
