@@ -17,7 +17,7 @@ if %errorlevel% neq 0 (
 )
 
 echo [OK] Python найден!
-for /f "tokens=*" %%i in ('python --version 2^>^&1') do set PYTHON_VERSION=%%i
+for /f "tokens=*" %%i in ('python --version') do set PYTHON_VERSION=%%i
 echo %PYTHON_VERSION%
 echo.
 
