@@ -1284,7 +1284,38 @@ class DeepAgentsGUI(ctk.CTk):
     def _process_message(self, message: str):
         """Process message in background thread."""
         try:
+            # Генерируем уникальный идентификатор для этой задачи/сессии
+            task_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+            task_log_file = Path(f"task_logs/task_{task_id}.log")
+            task_log_file.parent.mkdir(exist_ok=True)
+            
+            # Создаём отдельный логгер для этой задачи
+            task_logger = logging.getLogger(f"task_{task_id}")
+            task_logger.setLevel(logging.DEBUG)
+            
+            # Очищаем предыдущие хендлеры чтобы не дублировать
+            task_logger.handlers.clear()
+            
+            # Добавляем файловый хендлер для этой задачи
+            file_handler = logging.FileHandler(task_log_file, encoding='utf-8')
+            file_handler.setLevel(logging.DEBUG)
+            file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+            file_handler.setFormatter(file_formatter)
+            task_logger.addHandler(file_handler)
+            
+            # Добавляем консольный хендлер
+            console_handler = logging.StreamHandler()
+            console_handler.setLevel(logging.INFO)
+            console_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+            console_handler.setFormatter(console_formatter)
+            task_logger.addHandler(console_handler)
+            
+            task_logger.info(f"=" * 60)
+            task_logger.info(f"НОВАЯ ЗАДАЧА: {task_id}")
+            task_logger.info(f"=" * 60)
+            
             logger.info(f"Processing message: {message[:50]}...")
+            task_logger.info(f"📥 ЗАПРОС ПОЛЬЗОВАТЕЛЯ: {message}")
             
             # Очищаем лог процесса работы перед новым запросом
             self.after(0, lambda: self._clear_thinking_log())
@@ -1292,6 +1323,7 @@ class DeepAgentsGUI(ctk.CTk):
             # Записываем начало обработки в лог процесса
             self.after(0, lambda: self._log_thinking_step("🚀 Начало обработки запроса"))
             self.after(0, lambda: self._log_thinking_step(f"📝 Запрос: {message[:100]}{'...' if len(message) > 100 else ''}"))
+            self.after(0, lambda m=message: task_logger.info(f"📝 Текст запроса: {m}"))
             
             # Get model - use selected model from dropdown if available
             model_name = self.settings.get("model_name")
@@ -1362,27 +1394,34 @@ class DeepAgentsGUI(ctk.CTk):
                     if "messages" in chunk:
                         for msg in chunk["messages"]:
                             all_messages.append(msg)
-                            # Логируем размышления и вызовы инструментов
+                            # Логируем размышления и вызовы инструментов в UI и файл
                             if hasattr(msg, 'tool_calls') and msg.tool_calls:
                                 for tc in msg.tool_calls:
                                     tool_name = tc.get('name', 'unknown') if isinstance(tc, dict) else getattr(tc, 'name', 'unknown')
                                     tool_args = tc.get('arguments', {}) if isinstance(tc, dict) else getattr(tc, 'args', {})
                                     self.after(0, lambda tn=tool_name, ta=tool_args: self._log_thinking_step(f"🔧 Вызов инструмента: {tn}({ta})"))
+                                    task_logger.info(f"🔧 ВЫЗОВ ИНСТРУМЕНТА: {tool_name} с аргументами: {json.dumps(tool_args, ensure_ascii=False)}")
                             elif hasattr(msg, 'content') and msg.content:
-                                content_preview = str(msg.content)[:80]
-                                if len(str(msg.content)) > 80:
+                                content_full = str(msg.content)
+                                content_preview = content_full[:80]
+                                if len(content_full) > 80:
                                     content_preview += "..."
                                 self.after(0, lambda cp=content_preview: self._log_thinking_step(f"💭 Размышление: {cp}"))
+                                task_logger.info(f"💭 РАЗМЫШЛЕНИЕ АГЕНТА: {content_full}")
                             elif hasattr(msg, '__class__') and msg.__class__.__name__ == 'ToolMessage':
-                                result_preview = str(msg.content)[:60] if hasattr(msg, 'content') else ''
-                                if len(result_preview) > 60:
+                                result_full = str(msg.content) if hasattr(msg, 'content') else ''
+                                result_preview = result_full[:60]
+                                if len(result_full) > 60:
                                     result_preview += "..."
                                 self.after(0, lambda rp=result_preview: self._log_thinking_step(f"✅ Результат: {rp}"))
+                                task_logger.info(f"✅ РЕЗУЛЬТАТ ИНСТРУМЕНТА: {result_full}")
             except Exception as e:
                 logger.error(f"Stream error: {e}")
+                task_logger.error(f"❌ ОШИБКА ПОТОКА: {e}", exc_info=True)
                 raise
             
             logger.info("Agent invocation complete")
+            task_logger.info("✅ ВЫПОЛНЕНИЕ АГЕНТА ЗАВЕРШЕНО")
             response = {"messages": all_messages}
             
             self.after(0, lambda: self._log_thinking_step("✅ Генерация ответа завершена"))
@@ -1393,7 +1432,9 @@ class DeepAgentsGUI(ctk.CTk):
                 assistant_content = "No response generated"
             else:
                 assistant_content = assistant_message.content if hasattr(assistant_message, 'content') else str(assistant_message)
+            
             logger.info(f"Response length: {len(assistant_content)} characters")
+            task_logger.info(f"📤 ОТВЕТ АГЕНТА ({len(assistant_content)} символов): {assistant_content}")
             
             # Add to history
             self.conversation_history.append(AIMessage(content=assistant_content))
@@ -1406,12 +1447,17 @@ class DeepAgentsGUI(ctk.CTk):
             error_msg = f"Error: {str(e)}\n\nPlease ensure LM Studio is running and a model is loaded."
             self.after(0, lambda err=str(e): self._log_thinking_step(f"❌ Ошибка: {err}"))
             self.after(0, lambda: self._display_assistant_response(error_msg))
+            task_logger.error(f"❌ ОШИБКА ОБРАБОТКИ: {str(e)}", exc_info=True)
         
         finally:
             self.is_processing = False
             self.after(0, lambda: self.send_btn.configure(state="normal"))
             self.after(0, lambda: self._update_status("Ready"))
             self.after(0, lambda: self._log_thinking_step("⏸️ Ожидание следующего запроса..."))
+            task_logger.info("⏸️ ОЖИДАНИЕ СЛЕДУЮЩЕГО ЗАПРОСА...")
+            task_logger.info("=" * 60)
+            task_logger.info(f"ЗАДАЧА {task_id} ЗАВЕРШЕНА")
+            task_logger.info("=" * 60)
     
     def _display_assistant_response(self, content: str):
         """Display assistant response in chat."""
