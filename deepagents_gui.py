@@ -1397,6 +1397,8 @@ class DeepAgentsGUI(ctk.CTk):
             
             # Используем stream для отслеживания промежуточных шагов
             all_messages = []
+            last_ai_response = None  # Track last AI response for display
+            
             try:
                 for chunk in agent.stream({"messages": self.conversation_history}, config=config):
                     if "messages" in chunk:
@@ -1414,8 +1416,14 @@ class DeepAgentsGUI(ctk.CTk):
                                 content_preview = content_full[:80]
                                 if len(content_full) > 80:
                                     content_preview += "..."
-                                self.after(0, lambda cp=content_preview: self._log_thinking_step(f"💭 Размышление: {cp}"))
-                                task_logger.info(f"💭 РАЗМЫШЛЕНИЕ АГЕНТА: {content_full}")
+                                # Check if this is an AI message (intermediate response)
+                                if hasattr(msg, '__class__') and msg.__class__.__name__ == 'AIMessage':
+                                    last_ai_response = content_full
+                                    self.after(0, lambda cp=content_preview: self._log_thinking_step(f"💭 Промежуточный ответ: {cp}"))
+                                    task_logger.info(f"💭 ПРОМЕЖУТОЧНЫЙ ОТВЕТ АГЕНТА: {content_full}")
+                                else:
+                                    self.after(0, lambda cp=content_preview: self._log_thinking_step(f"💭 Размышление: {cp}"))
+                                    task_logger.info(f"💭 РАЗМЫШЛЕНИЕ АГЕНТА: {content_full}")
                             elif hasattr(msg, '__class__') and msg.__class__.__name__ == 'ToolMessage':
                                 result_full = str(msg.content) if hasattr(msg, 'content') else ''
                                 result_preview = result_full[:60]
@@ -1434,15 +1442,24 @@ class DeepAgentsGUI(ctk.CTk):
             
             self.after(0, lambda: self._log_thinking_step("✅ Генерация ответа завершена"))
             
-            # Get assistant response
-            assistant_message = all_messages[-1] if all_messages else None
-            if assistant_message is None:
-                assistant_content = "No response generated"
-            else:
-                assistant_content = assistant_message.content if hasattr(assistant_message, 'content') else str(assistant_message)
+            # Get assistant response - find the last AIMessage with content
+            assistant_content = None
+            for msg in reversed(all_messages):
+                if hasattr(msg, '__class__') and msg.__class__.__name__ == 'AIMessage':
+                    if hasattr(msg, 'content') and msg.content:
+                        assistant_content = str(msg.content)
+                        break
+                    # Check if it's an AI message with tool_calls but no content yet
+                    elif hasattr(msg, 'tool_calls') and msg.tool_calls:
+                        continue  # Skip messages that only have tool calls
             
-            logger.info(f"Response length: {len(assistant_content)} characters")
-            task_logger.info(f"📤 ОТВЕТ АГЕНТА ({len(assistant_content)} символов): {assistant_content}")
+            if assistant_content is None:
+                assistant_content = "No response generated"
+                logger.warning("No valid assistant response found in message history")
+                task_logger.warning("⚠️ Не найдено валидного ответа агента в истории сообщений")
+            else:
+                logger.info(f"Response length: {len(assistant_content)} characters")
+                task_logger.info(f"📤 ОТВЕТ АГЕНТА ({len(assistant_content)} символов): {assistant_content[:200]}{'...' if len(assistant_content) > 200 else ''}")
             
             # Add to history
             self.conversation_history.append(AIMessage(content=assistant_content))
