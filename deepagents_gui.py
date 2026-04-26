@@ -47,7 +47,7 @@ from core.gui import ChatWindow, MessageBubble
 
 # Configure logging
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler('deepagents_gui.log', encoding='utf-8'),
@@ -55,6 +55,14 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# Подавление шумных логгеров сторонних библиотек
+noisy_loggers = [
+    'httpcore', 'httpx', 'h2', 'hyper_util', 'cookie_store', 
+    'primp', 'duckduckgo_search', 'openai._base_client'
+]
+for logger_name in noisy_loggers:
+    logging.getLogger(logger_name).setLevel(logging.WARNING)
 
 # Try to import additional tools
 try:
