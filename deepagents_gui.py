@@ -1232,9 +1232,14 @@ class DeepAgentsGUI(ctk.CTk):
         try:
             logger.info(f"Processing message: {message[:50]}...")
             
+            def update_ui_immediate(callback):
+                self.after(0, callback)
+                self.after(0, self.update_idletasks)
+            
+
             # Activate process window
-            self.after(0, lambda: self.process_window.set_active(True))
-            self.after(0, lambda: self.process_window.add_action("Начало обработки запроса", details=message))
+            update_ui_immediate(lambda: self.process_window.set_active(True))
+            update_ui_immediate(lambda: self.process_window.add_action("Начало обработки запроса", details=message, immediate=True))
             
             # Get model - use selected model from dropdown if available
             model_name = self.settings.get("model_name")
@@ -1289,7 +1294,8 @@ class DeepAgentsGUI(ctk.CTk):
             
             # Track tool usage for display
             self.after(0, lambda: self._update_status(f"Processing... Tools: {', '.join(self.current_tool_names[:3])}..."))
-            self.after(0, lambda: self.process_window.add_info(f"Доступные инструменты: {len(tools)}"))
+            update_ui_immediate(lambda: self.process_window.add_info(f"Доступные инструменты: {len(tools)}", immediate=True))
+            self.after(0, lambda: self.update_idletasks())
             
             response = agent.invoke(
                 {"messages": self.conversation_history},
@@ -1304,15 +1310,15 @@ class DeepAgentsGUI(ctk.CTk):
                     for tc in msg.tool_calls:
                         tool_name = tc.get('name', 'unknown')
                         tool_args = tc.get('args', {})
-                        self.after(0, lambda tn=tool_name, ta=tool_args: (
-                            self.process_window.add_action(f"Вызов инструмента: {tn}"),
+                        update_ui_immediate(lambda tn=tool_name, ta=tool_args: (
+                            self.process_window.add_action(f"Вызов инструмента: {tn}", immediate=True),
                             self.tool_panel.start_tool(tn, ta)
                         ))
                 elif hasattr(msg, 'type') and msg.type == 'tool':
                     # Tool result
                     tool_output = msg.content if hasattr(msg, 'content') else str(msg)
-                    self.after(0, lambda: self.tool_panel.stop_tool())
-                    self.after(0, lambda: self.process_window.add_success("Инструмент выполнен"))
+                    update_ui_immediate(lambda: self.tool_panel.stop_tool())
+                    update_ui_immediate(lambda: self.process_window.add_success("Инструмент выполнен", immediate=True))
             
             # Get assistant response
             assistant_message = response["messages"][-1]
@@ -1323,16 +1329,16 @@ class DeepAgentsGUI(ctk.CTk):
             self.conversation_history.append(AIMessage(content=assistant_content))
             
             # Update UI in main thread
-            self.after(0, lambda: self.process_window.add_message("Ответ получен"))
-            self.after(0, lambda: self.process_window.set_active(False))
-            self.after(0, lambda: self._display_assistant_response(assistant_content))
+            update_ui_immediate(lambda: self.process_window.add_message("Ответ получен", immediate=True))
+            update_ui_immediate(lambda: self.process_window.set_active(False))
+            update_ui_immediate(lambda: self._display_assistant_response(assistant_content))
             
         except Exception as e:
             logger.error(f"Message processing failed: {str(e)}", exc_info=True)
             error_msg = f"Error: {str(e)}\n\nPlease ensure LM Studio is running and a model is loaded."
-            self.after(0, lambda: self.process_window.add_error(str(e)))
-            self.after(0, lambda: self.process_window.set_active(False))
-            self.after(0, lambda: self._display_assistant_response(error_msg))
+            update_ui_immediate(lambda: self.process_window.add_error(str(e), immediate=True))
+            update_ui_immediate(lambda: self.process_window.set_active(False))
+            update_ui_immediate(lambda: self._display_assistant_response(error_msg))
         
         finally:
             self.is_processing = False
