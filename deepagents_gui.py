@@ -726,7 +726,7 @@ class DeepAgentsGUI(ctk.CTk):
         # Header
         self._create_header()
         
-        # Main content area
+        # Main content area with thinking panel
         self._create_main_area()
         
         # Status bar
@@ -834,15 +834,17 @@ class DeepAgentsGUI(ctk.CTk):
         clear_btn.grid(row=0, column=6, padx=10, pady=10)
     
     def _create_main_area(self):
-        """Create main content area with chat and tools."""
+        """Create main content area with chat and thinking panel."""
+        # Создаем горизонтальную панель с чатом и процессом мышления
         main_frame = ctk.CTkFrame(self, fg_color="transparent")
         main_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
-        main_frame.grid_columnconfigure(0, weight=1)
+        main_frame.grid_columnconfigure(0, weight=3)  # Чат занимает больше места
+        main_frame.grid_columnconfigure(1, weight=1)  # Панель мышления
         main_frame.grid_rowconfigure(0, weight=1)
         
-        # Chat area
+        # === Левая часть: Область чата ===
         chat_container = ctk.CTkFrame(main_frame, fg_color="#1e1e1e")
-        chat_container.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
+        chat_container.grid(row=0, column=0, sticky="nsew", padx=(0, 5), pady=0)
         chat_container.grid_columnconfigure(0, weight=1)
         chat_container.grid_rowconfigure(0, weight=1)
         
@@ -858,7 +860,7 @@ class DeepAgentsGUI(ctk.CTk):
         self._add_welcome_message()
         
         # Input area
-        input_frame = ctk.CTkFrame(main_frame, height=100, fg_color="#2b2b2b")
+        input_frame = ctk.CTkFrame(chat_container, height=100, fg_color="#2b2b2b")
         input_frame.grid(row=1, column=0, sticky="ew", padx=0, pady=(10, 0))
         input_frame.grid_columnconfigure(0, weight=1)
         
@@ -886,6 +888,44 @@ class DeepAgentsGUI(ctk.CTk):
         
         # Bind Enter key
         self.input_text.bind("<Control-Return>", lambda e: self._send_message())
+        
+        # === Правая часть: Панель процесса работы (мышления) ===
+        self.thinking_panel = ctk.CTkFrame(main_frame, fg_color="#252525", width=300)
+        self.thinking_panel.grid(row=0, column=1, sticky="nsew", padx=(5, 0), pady=0)
+        self.thinking_panel.grid_columnconfigure(0, weight=1)
+        self.thinking_panel.grid_rowconfigure(1, weight=1)
+        
+        # Заголовок панели
+        thinking_header = ctk.CTkLabel(
+            self.thinking_panel,
+            text="🧠 Процесс работы",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color="#3498db"
+        )
+        thinking_header.grid(row=0, column=0, sticky="ew", padx=10, pady=10)
+        
+        # Прокручиваемая область для лога процесса
+        self.thinking_log = ctk.CTkTextbox(
+            self.thinking_panel,
+            font=ctk.CTkFont(size=11, family='Consolas'),
+            wrap="word",
+            state="disabled",
+            fg_color="#1a1a1a",
+            text_color="#aaaaaa"
+        )
+        self.thinking_log.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
+        
+        # Счётчик шагов/токенов
+        self.thinking_stats = ctk.CTkLabel(
+            self.thinking_panel,
+            text="Ожидание запроса...",
+            font=ctk.CTkFont(size=10),
+            text_color="#7f8c8d"
+        )
+        self.thinking_stats.grid(row=2, column=0, sticky="ew", padx=10, pady=5)
+        
+        # Инициализация лога процесса
+        self.thinking_steps = []
     
     def _create_status_bar(self):
         """Create status bar at bottom."""
