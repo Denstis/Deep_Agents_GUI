@@ -94,22 +94,23 @@ class ChatWindow(ctk.CTkScrollableFrame):
             old_bubble = self._bubbles.popleft()
             old_bubble.destroy()
         
-        # Создание нового пузыря
+        # Создание нового пузыря с адаптивной шириной
         bubble = MessageBubble(
             self,
             text=text,
             is_user=is_user,
             fg_color='#2b7da0' if is_user else '#3a3a3a',
-            corner_radius=12
+            corner_radius=12,
+            max_width=800
         )
         
-        # Размещение с выравниванием на всю ширину
-        sticky = 'ew'  # Растягивание на всю ширину
+        # Размещение с выравниванием по левому краю для ИИ, по правому для пользователя
+        sticky = 'w' if not is_user else 'e'
         bubble.grid(
             row=len(self._bubbles),
             column=0,
             sticky=sticky,
-            padx=5,
+            padx=(10, 10) if not is_user else (10, 10),
             pady=5
         )
         
