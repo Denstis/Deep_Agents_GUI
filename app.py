@@ -60,7 +60,19 @@ def main():
         from gui.main_window import DeepAgentsGUI
         print("✓ Loading GUI...")
         
+        # Initialize GUI in the main thread
         app = DeepAgentsGUI()
+        
+        # Update stats after a short delay to ensure UI is ready
+        def finalize_init():
+            try:
+                app._update_stats()
+                print("✓ GUI initialized successfully")
+                print("✓ Starting main event loop...")
+            except Exception as e:
+                print(f"⚠ Warning during finalization: {e}")
+        
+        app.after(1000, finalize_init)
         app.mainloop()
         
         return 0

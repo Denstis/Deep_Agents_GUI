@@ -111,8 +111,9 @@ class DeepAgent:
         """Register a tool with the agent"""
         self.tools[tool.name] = tool
         logger.info(f"Registered tool: {tool.name}")
-        if self.callback:
-            self.callback("tool_registered", {"name": tool.name, "agent": self.name})
+        # Вызываем callback только для важных событий, не для регистрации
+        # if self.callback:
+        #     self.callback("tool_registered", {"name": tool.name, "agent": self.name})
     
     def unregister_tool(self, tool_name: str):
         """Unregister a tool"""
@@ -247,7 +248,7 @@ class DeepAgent:
         self.workflow.add_conditional_edges(
             source="model",
             path=should_continue,
-            mapping={
+            path_map={  # Изменено с mapping на path_map для новой версии LangGraph
                 "tools": "tools",
                 "end": END
             }

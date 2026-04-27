@@ -84,7 +84,7 @@ class AgentManager:
         self.agents: Dict[str, DeepAgent] = {}
         self.configs: Dict[str, AgentConfig] = {}
         self.stats: Dict[str, AgentStats] = {}
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()  # Reentrant lock для избежания deadlock
         
         # Track active executions
         self._active_executions: Dict[str, bool] = {}
@@ -92,6 +92,21 @@ class AgentManager:
     def _create_agent_callback(self, agent_name: str) -> Callable[[str, Any], None]:
         """Create a callback handler for a specific agent"""
         def handler(event_type: str, data: Any):
+            # Обновляем статистику без блокировки для событий регистрации инструментов
+            if event_type in ("task_complete", "tool_call", "error"):
+                with self._lock:
+                    if agent_name in self.stats:
+                        stats = self.stats[agent_name]
+                        stats.last_active = datetime.now()
+                        
+                        if event_type == "task_complete":
+                            stats.tasks_completed += 1
+                        elif event_type == "tool_call":
+                            stats.total_tool_calls += 1
+                        elif event_type == "error":
+                            stats.tasks_failed += 1
+            
+            # Вызываем внешний callback без блокировки
             if self.callback:
                 self.callback("agent_event", {
                     "agent": agent_name,
@@ -99,19 +114,6 @@ class AgentManager:
                     "data": data,
                     "timestamp": datetime.now().isoformat()
                 })
-            
-            # Update stats based on events
-            with self._lock:
-                if agent_name in self.stats:
-                    stats = self.stats[agent_name]
-                    stats.last_active = datetime.now()
-                    
-                    if event_type == "task_complete":
-                        stats.tasks_completed += 1
-                    elif event_type == "tool_call":
-                        stats.total_tool_calls += 1
-                    elif event_type == "error":
-                        stats.tasks_failed += 1
         
         return handler
     
