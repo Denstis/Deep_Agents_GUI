@@ -24,8 +24,8 @@ class FileSystemReadInput(BaseModel):
     max_lines: int = Field(default=100, description="Maximum lines to read")
 
 class FileSystemReadTool(BaseTool):
-    name = "file_read"
-    description = "Read contents of a file from the filesystem"
+    name: str = "file_read"
+    description: str = "Read contents of a file from the filesystem"
     args_schema: Type[BaseModel] = FileSystemReadInput
     
     def _run(self, path: str, max_lines: int = 100) -> str:
@@ -73,8 +73,8 @@ class FileSystemWriteInput(BaseModel):
     append: bool = Field(default=False, description="Append to file instead of overwriting")
 
 class FileSystemWriteTool(BaseTool):
-    name = "file_write"
-    description = "Write content to a file on the filesystem"
+    name: str = "file_write"
+    description: str = "Write content to a file on the filesystem"
     args_schema: Type[BaseModel] = FileSystemWriteInput
     
     def _run(self, path: str, content: str, append: bool = False) -> str:
@@ -111,8 +111,8 @@ class FileSystemListInput(BaseModel):
     recursive: bool = Field(default=False, description="List recursively")
 
 class FileSystemListTool(BaseTool):
-    name = "file_list"
-    description = "List files and directories in a given path"
+    name: str = "file_list"
+    description: str = "List files and directories in a given path"
     args_schema: Type[BaseModel] = FileSystemListInput
     
     def _run(self, path: str = ".", recursive: bool = False) -> str:
@@ -160,8 +160,8 @@ class ConsoleExecuteInput(BaseModel):
     shell: bool = Field(default=True, description="Run in shell")
 
 class ConsoleExecuteTool(BaseTool):
-    name = "console_execute"
-    description = "Execute a shell/command line command and return output"
+    name: str = "console_execute"
+    description: str = "Execute a shell/command line command and return output"
     args_schema: Type[BaseModel] = ConsoleExecuteInput
     
     def _run(self, command: str, timeout: int = 30, shell: bool = True) -> str:
@@ -211,8 +211,8 @@ class WebSearchInput(BaseModel):
     num_results: int = Field(default=5, description="Number of results to return")
 
 class WebSearchTool(BaseTool):
-    name = "web_search"
-    description = "Search the web using DuckDuckGo"
+    name: str = "web_search"
+    description: str = "Search the web using DuckDuckGo"
     args_schema: Type[BaseModel] = WebSearchInput
     
     def _run(self, query: str, num_results: int = 5) -> str:
@@ -246,8 +246,8 @@ class WebFetchInput(BaseModel):
     timeout: int = Field(default=10, description="Request timeout")
 
 class WebFetchTool(BaseTool):
-    name = "web_fetch"
-    description = "Fetch content from a URL"
+    name: str = "web_fetch"
+    description: str = "Fetch content from a URL"
     args_schema: Type[BaseModel] = WebFetchInput
     
     def _run(self, url: str, timeout: int = 10) -> str:
@@ -290,8 +290,8 @@ class PythonExecuteInput(BaseModel):
     timeout: int = Field(default=30, description="Execution timeout")
 
 class PythonExecuteTool(BaseTool):
-    name = "python_execute"
-    description = "Execute Python code safely and return output"
+    name: str = "python_execute"
+    description: str = "Execute Python code safely and return output"
     args_schema: Type[BaseModel] = PythonExecuteInput
     
     def _run(self, code: str, timeout: int = 30) -> str:
@@ -372,8 +372,8 @@ class MathEvaluateInput(BaseModel):
     expression: str = Field(description="Mathematical expression to evaluate")
 
 class MathEvaluateTool(BaseTool):
-    name = "math_evaluate"
-    description = "Evaluate mathematical expressions safely"
+    name: str = "math_evaluate"
+    description: str = "Evaluate mathematical expressions safely"
     args_schema: Type[BaseModel] = MathEvaluateInput
     
     def _run(self, expression: str) -> str:
@@ -400,8 +400,8 @@ class MathEvaluateTool(BaseTool):
 # ============== Utility Tools ==============
 
 class GetCurrentTimeTool(BaseTool):
-    name = "get_current_time"
-    description = "Get the current date and time"
+    name: str = "get_current_time"
+    description: str = "Get the current date and time"
     
     def _run(self) -> str:
         from datetime import datetime
@@ -413,8 +413,8 @@ class GetCurrentTimeTool(BaseTool):
 
 
 class GetSystemInfoTool(BaseTool):
-    name = "get_system_info"
-    description = "Get system information (OS, Python version, etc.)"
+    name: str = "get_system_info"
+    description: str = "Get system information (OS, Python version, etc.)"
     
     def _run(self) -> str:
         import platform
