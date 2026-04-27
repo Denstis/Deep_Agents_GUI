@@ -1,59 +1,76 @@
 #!/usr/bin/env python3
 """
-DeepAgents GUI v2.0 - Модульная архитектура
-Главный файл запуска приложения
-
-Функционал:
-- Чат с AI агентом (интеграция с LM Studio)
-- Менеджер инструментов (включение/выключение)
-- Менеджер агентов (создание суб-агентов)
-- Статистика и логи системы
-- Настройки и справка
+DeepAgents GUI - Main Application Entry Point
+Real LangChain/LangGraph integration with multi-agent support.
 """
-
 import sys
-import logging
-from pathlib import Path
+import os
 
-# Добавляем корень проекта в путь
-sys.path.insert(0, str(Path(__file__).parent))
-
-# Настраиваем логирование
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler('deepagents.log', encoding='utf-8')
-    ]
-)
-
-logger = logging.getLogger(__name__)
+# Add workspace to path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 def main():
-    """Точка входа в приложение."""
-    logger.info("Запуск DeepAgents GUI v2.0")
+    """Main entry point"""
+    print("=" * 60)
+    print("DeepAgents GUI - Starting...")
+    print("=" * 60)
+    
+    # Check dependencies
+    try:
+        import customtkinter
+        print("✓ CustomTkinter loaded")
+    except ImportError as e:
+        print(f"✗ Missing dependency: {e}")
+        print("Install with: pip install -r requirements.txt")
+        return 1
     
     try:
-        from gui.main_window import DeepAgentsMainWindow
+        from langchain_openai import ChatOpenAI
+        print("✓ LangChain loaded")
+    except ImportError as e:
+        print(f"✗ Missing dependency: {e}")
+        print("Install with: pip install -r requirements.txt")
+        return 1
+    
+    try:
+        from langgraph.graph import StateGraph
+        print("✓ LangGraph loaded")
+    except ImportError as e:
+        print(f"✗ Missing dependency: {e}")
+        print("Install with: pip install -r requirements.txt")
+        return 1
+    
+    # Load environment variables
+    from dotenv import load_dotenv
+    load_dotenv()
+    
+    # Check API key
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        print("⚠ Warning: OPENAI_API_KEY not set in .env file")
+        print("  Some features may not work without an API key")
+        print("  Copy .env.example to .env and add your key")
+    else:
+        print("✓ OpenAI API key found")
+    
+    print("=" * 60)
+    
+    # Import and run GUI
+    try:
+        from gui.main_window import DeepAgentsGUI
+        print("✓ Loading GUI...")
         
-        app = DeepAgentsMainWindow()
-        logger.info("GUI успешно инициализирован")
-        
+        app = DeepAgentsGUI()
         app.mainloop()
         
-        logger.info("Приложение завершено")
-        
-    except ImportError as e:
-        logger.error(f"Ошибка импорта: {e}")
-        print(f"\n❌ Ошибка: Не удалось загрузить модули GUI")
-        print(f"Проверьте установку зависимостей: pip install -r requirements.txt\n")
-        sys.exit(1)
+        return 0
         
     except Exception as e:
-        logger.error(f"Критическая ошибка: {e}", exc_info=True)
-        print(f"\n❌ Критическая ошибка: {e}\n")
-        sys.exit(1)
+        print(f"✗ Failed to start GUI: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -1,14 +1,11 @@
-"""
-GUI Package - Модульный графический интерфейс DeepAgents
-"""
-
-__version__ = "2.0.0"
-__author__ = "DeepAgents Team"
+"""GUI package initialization"""
+from gui.tool_manager import ToolManager, ToolInfo
+from gui.agent_manager import AgentManager, AgentConfig, AgentStats
 
 __all__ = [
-    'main_window',
-    'agent_manager',
-    'tool_manager',
-    'components',
-    'dialogs',
+    "ToolManager",
+    "ToolInfo",
+    "AgentManager",
+    "AgentConfig",
+    "AgentStats"
 ]
