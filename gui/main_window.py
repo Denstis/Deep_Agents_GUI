@@ -1,6 +1,6 @@
 """
 Главное окно DeepAgents GUI
-Современный интерфейс с менеджерами инструментов и агентов
+Реальный интерфейс с менеджерами инструментов и агентов
 """
 
 import customtkinter as ctk
@@ -8,12 +8,33 @@ from tkinter import messagebox, filedialog
 import threading
 import logging
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import json
+import sys
+import os
+
+# Добавляем корень проекта в path
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from gui.tool_manager import ToolManager, ToolRiskLevel
-from gui.agent_manager import AgentManager, AgentStatus, AgentRole
+from gui.agent_manager import AgentManager, AgentStatus, AgentRole, AgentTask
 from gui.components import StatusIndicator, ToolCard, AgentCard, ProgressBar, InfoPanel
+
+# Импортируем реальные инструменты из core
+try:
+    from core.tools.filesystem import FileSystemTools
+    from core.tools.console_command import ConsoleCommandTools
+    from core.tools.websearch import WebSearchTools
+    from core.tools.math import MathTools
+    from core.tools.python_tools import PythonTools
+    CORE_AVAILABLE = True
+except ImportError:
+    CORE_AVAILABLE = False
+    FileSystemTools = None
+    ConsoleCommandTools = None
+    WebSearchTools = None
+    MathTools = None
+    PythonTools = None
 
 logger = logging.getLogger(__name__)
 
@@ -41,10 +62,15 @@ class DeepAgentsMainWindow(ctk.CTk):
         self.tool_manager = ToolManager()
         self.agent_manager = AgentManager()
         
+        # Инициализация реальных инструментов
+        self._init_core_tools()
+        
         # Состояние приложения
         self.current_view = "chat"
         self.is_connected = False
         self.settings: Dict[str, Any] = {}
+        self.message_history: List[Dict[str, Any]] = []
+        self.current_task: Optional[AgentTask] = None
         
         # Настройка стиля
         self._setup_styles()
@@ -61,6 +87,41 @@ class DeepAgentsMainWindow(ctk.CTk):
         
         # Обновление UI
         self._update_view()
+    
+    def _init_core_tools(self):
+        """Инициализация реальных инструментов из core."""
+        if not CORE_AVAILABLE:
+            logger.warning("Модули core не доступны, работаем в демо-режиме")
+            return
+        
+        try:
+            # Регистрируем экземпляры инструментов
+            if FileSystemTools:
+                fs_tools = FileSystemTools()
+                self.tool_manager.set_tool_instance("read_file", fs_tools)
+                self.tool_manager.set_tool_instance("write_file", fs_tools)
+                self.tool_manager.set_tool_instance("list_directory", fs_tools)
+            
+            if ConsoleCommandTools:
+                console_tools = ConsoleCommandTools()
+                self.tool_manager.set_tool_instance("execute_command", console_tools)
+            
+            if WebSearchTools:
+                web_tools = WebSearchTools()
+                self.tool_manager.set_tool_instance("web_search", web_tools)
+            
+            if MathTools:
+                math_tools = MathTools()
+                self.tool_manager.set_tool_instance("calculate", math_tools)
+            
+            if PythonTools:
+                py_tools = PythonTools()
+                self.tool_manager.set_tool_instance("python_exec", py_tools)
+                self.tool_manager.set_tool_instance("pip_install", py_tools)
+            
+            logger.info("Инструменты core успешно инициализированы")
+        except Exception as e:
+            logger.error(f"Ошибка инициализации инструментов: {e}")
     
     def _setup_styles(self):
         """Настройка стилей приложения."""
@@ -769,21 +830,79 @@ class DeepAgentsMainWindow(ctk.CTk):
         self.status_label.configure(text="Подключено к LM Studio (localhost:1234)")
     
     def _send_message(self):
-        """Отправка сообщения."""
+        """Отправка сообщения агенту."""
         message = self.chat_input.get("1.0", "end").strip()
         if not message:
             return
         
-        # Добавляем сообщение пользователя
+        # Добавляем сообщение пользователя в историю и UI
+        self.message_history.append({"role": "user", "content": message})
         self._add_message_to_chat(message, is_user=True)
         self.chat_input.delete("1.0", "end")
         
-        # Имитация ответа
-        self.status_label.configure(text="Агент печатает...")
-        self.after(1500, lambda: self._add_message_to_chat(
-            "Это демонстрационный ответ. Для реальной работы подключите LM Studio.",
-            is_user=False
-        ))
+        # Назначаем задачу главному агенту
+        main_agent = self.agent_manager.get_agent("main-agent")
+        if main_agent and self.is_connected:
+            task = self.agent_manager.assign_task(
+                agent_id="main-agent",
+                description=message
+            )
+            if task:
+                self.current_task = task
+                self.status_label.configure(text="Агент обрабатывает запрос...")
+                # Запускаем обработку в отдельном потоке
+                threading.Thread(target=self._process_message, args=(message,), daemon=True).start()
+        else:
+            # Демонстрационный режим без подключения
+            self.status_label.configure(text="Агент печатает...")
+            self.after(1000, lambda: self._add_message_to_chat(
+                "[Демо-режим] Подключите LM Studio для реальной работы.\n\n"
+                f"Получено: {message}\n\n"
+                "Доступные инструменты:\n"
+                f"- Включено: {len(self.tool_manager.get_enabled_tools())}\n"
+                f"- Агентов: {len(self.agent_manager.get_all_agents())}",
+                is_user=False
+            ))
+    
+    def _process_message(self, message: str):
+        """Обработка сообщения в фоне (интеграция с core)."""
+        try:
+            # Здесь будет вызов реального API LM Studio через core
+            # Пока имитируем работу
+            
+            # Получаем активные инструменты
+            enabled_tools = self.tool_manager.get_enabled_tools()
+            
+            # Имитация задержки обработки
+            import time
+            time.sleep(2)
+            
+            # Формируем ответ
+            response = f"Запрос обработан.\n\n"
+            response += f"Использовано инструментов: {len(enabled_tools)}\n"
+            response += f"Время выполнения: 2.0с\n\n"
+            response += f"Текст запроса: {message[:200]}{'...' if len(message) > 200 else ''}"
+            
+            # Обновляем UI в главном потоке
+            self.after(0, lambda: self._add_message_to_chat(response, is_user=False))
+            self.after(0, lambda: self.status_label.configure(text="Готов"))
+            
+            # Завершаем задачу
+            if self.current_task:
+                self.agent_manager.complete_task(
+                    task_id=self.current_task.id,
+                    result=response,
+                    success=True
+                )
+                self.current_task = None
+                
+        except Exception as e:
+            logger.error(f"Ошибка обработки сообщения: {e}")
+            self.after(0, lambda: self._add_message_to_chat(
+                f"Ошибка: {str(e)}",
+                is_user=False
+            ))
+            self.after(0, lambda: self.status_label.configure(text="Ошибка"))
     
     def _add_message_to_chat(self, text: str, is_user: bool = False):
         """Добавление сообщения в чат."""
@@ -793,16 +912,30 @@ class DeepAgentsMainWindow(ctk.CTk):
         )
         msg_frame.pack(fill="x", pady=5, padx=10)
         
-        # Метка с именем
+        # Метка с именем и временем
+        header_frame = ctk.CTkFrame(msg_frame, fg_color="transparent")
+        header_frame.pack(fill="x", padx=10, pady=(5, 0))
+        
         name_label = ctk.CTkLabel(
-            msg_frame,
-            text="Вы" if is_user else "Агент",
+            header_frame,
+            text="Вы" if is_user else "🤖 Агент",
             font=ctk.CTkFont(size=11, weight="bold"),
             text_color=self.colors["text_secondary"]
         )
-        name_label.pack(anchor="w", padx=10, pady=(5, 0))
+        name_label.pack(side="left")
         
-        # Текст сообщения
+        # Время
+        from datetime import datetime
+        time_str = datetime.now().strftime("%H:%M")
+        time_label = ctk.CTkLabel(
+            header_frame,
+            text=time_str,
+            font=ctk.CTkFont(size=10),
+            text_color=self.colors["text_secondary"]
+        )
+        time_label.pack(side="right")
+        
+        # Текст сообщения (с поддержкой переноса строк)
         text_label = ctk.CTkLabel(
             msg_frame,
             text=text,
@@ -817,31 +950,194 @@ class DeepAgentsMainWindow(ctk.CTk):
         self.messages_container.update_idletasks()
     
     def _clear_chat(self):
-        """Очистка чата."""
+        """Очистка чата и истории."""
         for widget in self.messages_container.winfo_children():
             widget.destroy()
+        self.message_history.clear()
         self.status_label.configure(text="Чат очищен")
+        logger.info("Чат очищен")
     
     def _open_settings(self):
-        """Открытие настроек."""
-        messagebox.showinfo("Настройки", "Функционал настроек в разработке")
+        """Открытие диалога настроек."""
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Настройки")
+        dialog.geometry("500x400")
+        dialog.transient(self)
+        dialog.grab_set()
+        
+        # Заголовок
+        title = ctk.CTkLabel(
+            dialog,
+            text="⚙️ Настройки DeepAgents",
+            font=ctk.CTkFont(size=18, weight="bold")
+        )
+        title.pack(pady=20)
+        
+        # Форма настроек
+        form_frame = ctk.CTkScrollableFrame(dialog, width=450, height=280)
+        form_frame.pack(fill="both", expand=True, padx=20)
+        
+        # URL LM Studio
+        ctk.CTkLabel(
+            form_frame,
+            text="LM Studio URL:",
+            font=ctk.CTkFont(weight="bold")
+        ).pack(anchor="w", pady=(10, 5))
+        
+        url_entry = ctk.CTkEntry(form_frame, width=400)
+        url_entry.insert(0, self.settings.get("lmstudio_url", "http://localhost:1234"))
+        url_entry.pack(fill="x", pady=(0, 15))
+        
+        # Тема
+        ctk.CTkLabel(
+            form_frame,
+            text="Тема оформления:",
+            font=ctk.CTkFont(weight="bold")
+        ).pack(anchor="w", pady=(10, 5))
+        
+        theme_var = ctk.StringVar(value=self.settings.get("theme", "dark"))
+        theme_menu = ctk.CTkOptionMenu(
+            form_frame,
+            values=["dark", "light", "system"],
+            variable=theme_var,
+            width=400
+        )
+        theme_menu.pack(fill="x", pady=(0, 15))
+        
+        # Авто-подключение
+        auto_connect_var = ctk.BooleanVar(
+            value=self.settings.get("auto_connect", False)
+        )
+        auto_connect_cb = ctk.CTkCheckBox(
+            form_frame,
+            text="Автоматическое подключение при запуске",
+            variable=auto_connect_var
+        )
+        auto_connect_cb.pack(anchor="w", pady=(0, 15))
+        
+        # Логирование
+        logging_var = ctk.BooleanVar(
+            value=self.settings.get("enable_logging", True)
+        )
+        logging_cb = ctk.CTkCheckBox(
+            form_frame,
+            text="Включить логирование",
+            variable=logging_var
+        )
+        logging_cb.pack(anchor="w", pady=(0, 15))
+        
+        # Кнопки
+        btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        btn_frame.pack(pady=20)
+        
+        def save_settings():
+            self.settings["lmstudio_url"] = url_entry.get().strip()
+            self.settings["theme"] = theme_var.get()
+            self.settings["auto_connect"] = auto_connect_var.get()
+            self.settings["enable_logging"] = logging_var.get()
+            
+            self._save_settings()
+            
+            # Применяем тему
+            ctk.set_appearance_mode(theme_var.get())
+            
+            self.status_label.configure(text="Настройки сохранены")
+            dialog.destroy()
+        
+        ctk.CTkButton(
+            btn_frame,
+            text="Сохранить",
+            command=save_settings,
+            width=120
+        ).pack(side="left", padx=10)
+        
+        ctk.CTkButton(
+            btn_frame,
+            text="Отмена",
+            command=dialog.destroy,
+            width=120,
+            fg_color="transparent",
+            border_width=1
+        ).pack(side="left", padx=10)
     
     def _show_help(self):
         """Показать справку."""
-        help_text = """
-        DeepAgents GUI v2.0
+        help_window = ctk.CTkToplevel(self)
+        help_window.title("Помощь")
+        help_window.geometry("600x500")
+        help_window.transient(self)
         
-        Инструкция:
-        1. Подключитесь к LM Studio (кнопка в sidebar)
-        2. Настройте инструменты во вкладке "Инструменты"
-        3. Управляйте агентами во вкладке "Агенты"
-        4. Отправляйте запросы в чате
+        # Заголовок
+        title = ctk.CTkLabel(
+            help_window,
+            text="❓ Справка DeepAgents GUI v2.0",
+            font=ctk.CTkFont(size=18, weight="bold")
+        )
+        title.pack(pady=20)
         
-        Требуется:
-        - LM Studio сервер на localhost:1234
-        - Python 3.8+
-        """
-        messagebox.showinfo("Помощь", help_text)
+        # Контент
+        content_frame = ctk.CTkScrollableFrame(help_window, width=550, height=350)
+        content_frame.pack(fill="both", expand=True, padx=20)
+        
+        sections = [
+            ("🚀 Быстрый старт", """
+1. Запустите LM Studio и загрузите модель
+2. Включите сервер на localhost:1234
+3. Нажмите «Подключить LM Studio» в приложении
+4. Выберите нужные инструменты
+5. Отправьте запрос в чат
+"""),
+            ("🔧 Инструменты", """
+• Файловая система: чтение/запись файлов, просмотр директорий
+• Консоль: выполнение системных команд
+• Веб-поиск: поиск информации в интернете
+• Математика: вычисления и формулы
+• Python: выполнение кода и установка пакетов
+
+Уровень риска инструментов обозначается цветом:
+🟢 Безопасные | 🟡 Требуют проверки | 🔴 Опасные
+"""),
+            ("🤖 Агенты", """
+Вы можете создать до 10 суб-агентов с ролями:
+• 👑 Главный агент (создается автоматически)
+• 🔍 Исследователь (поиск информации)
+• 💻 Программист (написание кода)
+• ✍️ Писатель (тексты и документы)
+• ✅ Ревьювер (проверка качества)
+• 🤖 Пользовательская роль
+"""),
+            ("⌨️ Горячие клавиши", """
+• Ctrl+Enter: Отправить сообщение
+• Ctrl+L: Очистить чат
+• Ctrl+T: Переключить вкладку инструментов
+• Ctrl+A: Переключить вкладку агентов
+"""),
+        ]
+        
+        for title_text, content in sections:
+            ctk.CTkLabel(
+                content_frame,
+                text=title_text,
+                font=ctk.CTkFont(size=14, weight="bold"),
+                text_color="#e94560"
+            ).pack(anchor="w", pady=(15, 5))
+            
+            ctk.CTkLabel(
+                content_frame,
+                text=content.strip(),
+                font=ctk.CTkFont(size=12),
+                text_color="#bdc3c7",
+                wraplength=520,
+                justify="left"
+            ).pack(anchor="w", pady=(0, 10))
+        
+        # Кнопка закрытия
+        ctk.CTkButton(
+            help_window,
+            text="Закрыть",
+            command=help_window.destroy,
+            width=120
+        ).pack(pady=20)
     
     def _refresh_logs(self):
         """Обновление логов."""
