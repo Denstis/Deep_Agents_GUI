@@ -46,7 +46,7 @@ class DeepAgentsGUI(ctk.CTk):
         self._create_tools_panel()
         self._create_status_bar()
         self.after(100, self._process_events)
-        self._create_default_agent()
+        self.after(500, self._create_default_agent)  # Отложенный вызов после отображения окна
         logger.info("DeepAgents GUI initialized")
 
     def _create_layout(self):
@@ -153,12 +153,22 @@ class DeepAgentsGUI(ctk.CTk):
         self._update_stats()
 
     def _create_default_agent(self):
-        config = AgentConfig(name="assistant", role="General Assistant", system_prompt="You are a helpful AI assistant with access to various tools.", model=os.getenv("DEFAULT_MODEL", "gpt-4o-mini"))
-        if self.agent_manager.create_agent(config):
-            self._update_agent_selector()
-            self.agent_selector.set("assistant")
-            self.current_agent = "assistant"
-            self._add_chat_message("system", "Assistant agent ready. How can I help you today?")
+        """Create default assistant agent after GUI is displayed"""
+        try:
+            config = AgentConfig(
+                name="assistant", 
+                role="General Assistant", 
+                system_prompt="You are a helpful AI assistant with access to various tools.", 
+                model=os.getenv("DEFAULT_MODEL", "gpt-4o-mini")
+            )
+            if self.agent_manager.create_agent(config):
+                self._update_agent_selector()
+                self.agent_selector.set("assistant")
+                self.current_agent = "assistant"
+                self._add_chat_message("system", "Assistant agent ready. How can I help you today?")
+        except Exception as e:
+            logger.error(f"Failed to create default agent: {e}")
+            self._add_chat_message("system", f"Error creating agent: {e}")
 
     def _update_agent_selector(self):
         agents = self.agent_manager.list_agents()

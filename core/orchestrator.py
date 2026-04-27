@@ -188,7 +188,7 @@ class MultiAgentOrchestrator:
         self.workflow.add_conditional_edges(
             source="select",
             path=lambda s: select_next_task(s),
-            mapping={
+            path_map={  # Изменено с mapping на path_map для новой версии LangGraph
                 "execute": "execute",
                 "wait": "wait",
                 "end": END
