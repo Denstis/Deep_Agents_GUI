@@ -8,8 +8,10 @@ __all__ = [
     'MessageBubble',
     'ProcessWindow',
     'ToolExecutionPanel',
+    'SettingsDialog',
 ]
 
 from .chat_window import ChatWindow
 from .message_bubble import MessageBubble
 from .process_window import ProcessWindow, ToolExecutionPanel
+from .settings_dialog import SettingsDialog
