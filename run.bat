@@ -1,41 +1,47 @@
 @echo off
-REM DeepAgents GUI v2.0 - Launcher
-chcp 65001 >nul
-echo ============================================
-echo   DeepAgents GUI v2.0
-echo ============================================
+REM DeepAgents GUI Launcher for Windows
+
+echo ============================================================
+echo   DeepAgents GUI - Multi-Agent System with LangChain
+echo ============================================================
 echo.
 
-REM Проверка Python
+REM Check Python installation
 python --version >nul 2>&1
 if errorlevel 1 (
-    echo Ошибка: Python не найден
+    echo ERROR: Python not found. Please install Python 3.9+
     pause
     exit /b 1
 )
 
-echo [1/3] Python найден
-echo.
-
-REM Создание venv если нет
-if not exist "venv" (
-    echo [2/3] Создание виртуального окружения...
-    python -m venv venv
-) else (
-    echo [2/3] Виртуальное окружение готово
+REM Activate virtual environment if exists
+if exist venv\Scripts\activate.bat (
+    echo Activating virtual environment...
+    call venv\Scripts\activate.bat
 )
-echo.
 
-REM Активация и запуск
-echo [3/3] Запуск DeepAgents GUI...
-call venv\Scripts\activate.bat
-pip install -q customtkinter
+REM Install dependencies if needed
+if not exist .deps_installed (
+    echo Installing dependencies...
+    pip install -r requirements.txt
+    if errorlevel 1 (
+        echo ERROR: Failed to install dependencies
+        pause
+        exit /b 1
+    )
+    echo. > .deps_installed
+)
+
+REM Check .env file
+if not exist .env (
+    echo WARNING: .env file not found
+    echo Copy .env.example to .env and add your API key
+    echo.
+)
+
+REM Run application
+echo Starting DeepAgents GUI...
+echo.
 python app.py
 
-if errorlevel 1 (
-    echo.
-    echo Ошибка при запуске
-    pause
-)
-
-deactivate >nul 2>&1
+pause

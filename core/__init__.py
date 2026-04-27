@@ -1,23 +1,45 @@
-"""
-DeepAgents Package - Modular AI Agent System with LM Studio Integration
-"""
-
-__version__ = "1.0.0"
-__author__ = "DeepAgents Team"
-
-# Re-export key components for convenience
-from core.utils import LMStudioClient
+"""Core package initialization"""
+from core.agent import DeepAgent, AgentStatus, AgentState
 from core.tools import (
-    SimpleFilesystemTools,
-    get_execute_command_tool,
-    WebSearchTools,
-    MathTools,
+    get_all_tools,
+    get_tool_by_name,
+    get_tool_categories,
+    FileSystemReadTool,
+    FileSystemWriteTool,
+    FileSystemListTool,
+    ConsoleExecuteTool,
+    WebSearchTool,
+    WebFetchTool,
+    PythonExecuteTool,
+    MathEvaluateTool,
+    GetCurrentTimeTool,
+    GetSystemInfoTool
 )
+from core.orchestrator import MultiAgentOrchestrator, OrchestratorMode, Task
 
 __all__ = [
-    "LMStudioClient",
-    "SimpleFilesystemTools",
-    "get_execute_command_tool",
-    "WebSearchTools",
-    "MathTools",
+    # Agent
+    "DeepAgent",
+    "AgentStatus", 
+    "AgentState",
+    
+    # Tools
+    "get_all_tools",
+    "get_tool_by_name",
+    "get_tool_categories",
+    "FileSystemReadTool",
+    "FileSystemWriteTool",
+    "FileSystemListTool",
+    "ConsoleExecuteTool",
+    "WebSearchTool",
+    "WebFetchTool",
+    "PythonExecuteTool",
+    "MathEvaluateTool",
+    "GetCurrentTimeTool",
+    "GetSystemInfoTool",
+    
+    # Orchestrator
+    "MultiAgentOrchestrator",
+    "OrchestratorMode",
+    "Task"
 ]

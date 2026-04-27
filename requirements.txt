@@ -1,28 +1,22 @@
-# Core LangChain/LangGraph
-langchain>=0.3.0
-langchain-core>=0.3.0
-langchain-openai>=0.2.0
-langgraph>=0.2.0
-langsmith>=0.1.0
-
-# Validation & Config
+# Core dependencies for DeepAgents
+langchain>=0.1.0
+langchain-openai>=0.0.5
+langchain-community>=0.0.10
+langgraph>=0.0.20
 pydantic>=2.0.0
 python-dotenv>=1.0.0
+tiktoken>=0.5.0
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+duckduckgo-search>=4.0.0
 
-# Testing
-pytest>=8.0.0
-pytest-asyncio>=0.21.0
-
-# GUI
+# GUI dependencies
 customtkinter>=5.2.0
-tkinter-tooltip>=1.0.0
 Pillow>=10.0.0
 
-# Visualization
-networkx>=3.0
-matplotlib>=3.7.0
-
-# Utilities
-httpx>=0.27.0
-duckduckgo-search>=6.0.0
-sympy>=1.12
+# Development
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+black>=23.0.0
+flake8>=6.0.0
+mypy>=1.0.0
